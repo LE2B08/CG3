@@ -33,6 +33,7 @@ extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg
 #include "DirectionalLight.h"
 #include "Particle.h"
 #include "ParticleForGPU.h"
+#include "Emitter.h"
 
 #pragma comment(lib,"dxgi.lib")
 #pragma comment(lib,"dxguid.lib")
@@ -55,7 +56,7 @@ enum BlendMode
 	kcountOfBlendMode,	// 利用してはいけない
 };
 
-BlendMode currentBlendMode = kBlendModeNone;
+BlendMode currentBlendMode = kBlendModeAdd;
 
 const char* blendModeNames[kcountOfBlendMode] = {
 	"kBlendModeNone",        // ブレンドなし
@@ -521,7 +522,7 @@ ModelData LoadObjFile(const std::string& directoryPath, const std::string& filen
 }
 
 // Particle生成関数
-Particle MakeNewParticle(std::mt19937& randomEngine)
+Particle MakeNewParticle(std::mt19937& randomEngine, const Vector3& translate)
 {
 	Particle particle;
 
@@ -530,13 +531,14 @@ Particle MakeNewParticle(std::mt19937& randomEngine)
 	std::uniform_real_distribution<float> distColor(0.0, 1.0f);
 	std::uniform_real_distribution<float> distTime(1.0, 3.0f);
 
-
 	// 位置と速度を[-1, 1]でランダムに初期化
-	particle.transform = {
-		{1.0f, 1.0f, 1.0f},
-		{0.0f, 0.0f, 0.0f},
-		{distribution(randomEngine),distribution(randomEngine),distribution(randomEngine)}
-	};
+	particle.transform.scale = { 1.0f, 1.0f, 1.0f };
+	particle.transform.rotate = { 0.0f, 0.0f, 0.0f };
+	particle.transform.translate = { distribution(randomEngine),distribution(randomEngine),distribution(randomEngine) };
+
+	// 発生場所を計算
+	Vector3 randomTranslate{ distribution(randomEngine),distribution(randomEngine),distribution(randomEngine) };
+	particle.transform.translate = translate + randomTranslate;
 
 	// 色を[0, 1]でランダムに初期化
 	particle.color = { distColor(randomEngine), distColor(randomEngine), distColor(randomEngine), 1.0f };
@@ -544,12 +546,22 @@ Particle MakeNewParticle(std::mt19937& randomEngine)
 	// パーティクル生成時にランダムに1秒～3秒の間生存
 	particle.lifeTime = distTime(randomEngine);
 	particle.currentTIme = 0;
-
 	particle.velocity = { distribution(randomEngine),distribution(randomEngine),distribution(randomEngine) };
+
 	return particle;
 }
 
+// パーティクルを射出する関数
+std::list<Particle> Emit(const Emitter& emitter, std::mt19937& randomEngine)
+{
+	std::list<Particle> particles;
+	for (uint32_t count = 0; count < emitter.count; ++count)
+	{
+		particles.push_back(MakeNewParticle(randomEngine, emitter.transform.translate));
+	}
 
+	return particles;
+}
 
 // Windowsアプリでのエントリーポイント(main関数)
 int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
@@ -984,36 +996,95 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 
 #pragma region BlendStateの設定を行う
 	//BlendStateの設定
-	D3D12_BLEND_DESC blendDesc{};
-	// ノーマル
-	blendDesc.RenderTarget[0].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
-	blendDesc.RenderTarget[0].BlendEnable = TRUE;
-	blendDesc.RenderTarget[0].SrcBlend = D3D12_BLEND_SRC_ALPHA;
-	blendDesc.RenderTarget[0].BlendOp = D3D12_BLEND_OP_ADD;
-	blendDesc.RenderTarget[0].DestBlend = D3D12_BLEND_INV_SRC_ALPHA;
-	blendDesc.RenderTarget[0].SrcBlendAlpha = D3D12_BLEND_ONE;
-	blendDesc.RenderTarget[0].BlendOpAlpha = D3D12_BLEND_OP_ADD;
-	blendDesc.RenderTarget[0].DestBlendAlpha = D3D12_BLEND_ZERO;
+	D3D12_RENDER_TARGET_BLEND_DESC blendDesc{};
 
-	//// 加算
-	//blendDesc.RenderTarget[0].SrcBlendAlpha = D3D12_BLEND_ONE;		  // アルファのソースはそのまま
-	//blendDesc.RenderTarget[0].BlendOpAlpha = D3D12_BLEND_OP_ADD;	  // アルファの加算操作
-	//blendDesc.RenderTarget[0].DestBlendAlpha = D3D12_BLEND_ZERO;	  // アルファのデスティネーションは無視
+	// ブレンドするかしないか
+	//blendDesc.BlendEnable = false;
+	// すべての色要素を書き込む
+	blendDesc.RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
 
-	//// 減算
-	//blendDesc.RenderTarget[0].SrcBlendAlpha = D3D12_BLEND_ONE;		 // アルファのソースはそのまま
-	//blendDesc.RenderTarget[0].BlendOpAlpha = D3D12_BLEND_OP_ADD;	 // アルファの加算操作
-	//blendDesc.RenderTarget[0].DestBlendAlpha = D3D12_BLEND_ZERO;	 // アルファのデスティネーションは無視
+	// 各ブレンドモードの設定を行う
+	switch (currentBlendMode)
+	{
+		// ブレンドモードなし
+	case BlendMode::kBlendModeNone:
 
-	//// 乗算
-	//blendDesc.RenderTarget[0].SrcBlendAlpha = D3D12_BLEND_ONE;		 // アルファのソースはそのまま
-	//blendDesc.RenderTarget[0].BlendOpAlpha = D3D12_BLEND_OP_ADD;	 // アルファの加算操作
-	//blendDesc.RenderTarget[0].DestBlendAlpha = D3D12_BLEND_ZERO;	 // アルファのデスティネーションは無視
+		blendDesc.BlendEnable = false;
+		break;
 
-	//// スクリーン
-	//blendDesc.RenderTarget[0].SrcBlendAlpha = D3D12_BLEND_ONE;		 // アルファのソースはそのまま
-	//blendDesc.RenderTarget[0].BlendOpAlpha = D3D12_BLEND_OP_ADD;	 // アルファの加算操作
-	//blendDesc.RenderTarget[0].DestBlendAlpha = D3D12_BLEND_ZERO;	 // アルファのデスティネーションは無視
+		// 通常αブレンドモード
+	case BlendMode::kBlendModeNormal:
+
+		// ノーマル
+		blendDesc.BlendEnable = true;
+		blendDesc.SrcBlend = D3D12_BLEND_SRC_ALPHA;
+		blendDesc.BlendOp = D3D12_BLEND_OP_ADD;
+		blendDesc.DestBlend = D3D12_BLEND_INV_SRC_ALPHA;
+		blendDesc.SrcBlendAlpha = D3D12_BLEND_ONE;
+		blendDesc.BlendOpAlpha = D3D12_BLEND_OP_ADD;
+		blendDesc.DestBlendAlpha = D3D12_BLEND_ZERO;
+		break;
+
+		// 加算ブレンドモード
+	case BlendMode::kBlendModeAdd:
+
+		// 加算
+		blendDesc.BlendEnable = true;
+		blendDesc.SrcBlend = D3D12_BLEND_SRC_ALPHA;
+		blendDesc.BlendOp = D3D12_BLEND_OP_ADD;
+		blendDesc.DestBlend = D3D12_BLEND_ONE;
+		blendDesc.SrcBlendAlpha = D3D12_BLEND_ONE;		  // アルファのソースはそのまま
+		blendDesc.BlendOpAlpha = D3D12_BLEND_OP_ADD;	  // アルファの加算操作
+		blendDesc.DestBlendAlpha = D3D12_BLEND_ZERO;	  // アルファのデスティネーションは無視
+		break;
+
+		// 減算ブレンドモード
+	case BlendMode::kBlendModeSubtract:
+
+		// 減算
+		blendDesc.BlendEnable = true;
+		blendDesc.SrcBlend = D3D12_BLEND_SRC_ALPHA;
+		blendDesc.BlendOp = D3D12_BLEND_OP_REV_SUBTRACT;
+		blendDesc.DestBlend = D3D12_BLEND_ONE;
+		blendDesc.SrcBlendAlpha = D3D12_BLEND_ONE;		 // アルファのソースはそのまま
+		blendDesc.BlendOpAlpha = D3D12_BLEND_OP_ADD;	 // アルファの加算操作
+		blendDesc.DestBlendAlpha = D3D12_BLEND_ZERO;	 // アルファのデスティネーションは無
+		break;
+
+		// 乗算ブレンドモード
+	case BlendMode::kBlendModeMultiply:
+
+		// 乗算
+		blendDesc.BlendEnable = true;
+		blendDesc.SrcBlend = D3D12_BLEND_ZERO;
+		blendDesc.BlendOp = D3D12_BLEND_OP_ADD;
+		blendDesc.DestBlend = D3D12_BLEND_SRC_COLOR;
+		blendDesc.SrcBlendAlpha = D3D12_BLEND_ONE;		 // アルファのソースはそのまま
+		blendDesc.BlendOpAlpha = D3D12_BLEND_OP_ADD;	 // アルファの加算操作
+		blendDesc.DestBlendAlpha = D3D12_BLEND_ZERO;	 // アルファのデスティネーションは無視
+		break;
+
+		// スクリーンブレンドモード
+	case BlendMode::kBlendModeScreen:
+
+		// スクリーン
+		blendDesc.BlendEnable = true;
+		blendDesc.SrcBlend = D3D12_BLEND_INV_DEST_COLOR;
+		blendDesc.BlendOp = D3D12_BLEND_OP_ADD;
+		blendDesc.DestBlend = D3D12_BLEND_ONE;
+		blendDesc.SrcBlendAlpha = D3D12_BLEND_ONE;		 // アルファのソースはそのまま
+		blendDesc.BlendOpAlpha = D3D12_BLEND_OP_ADD;	 // アルファの加算操作
+		blendDesc.DestBlendAlpha = D3D12_BLEND_ZERO;	 // アルファのデスティネーションは無視
+		break;
+
+		// 無効なブレンドモード
+	default:
+		// 無効なモードの処理
+		assert(false && "Invalid Blend Mode");
+		break;
+	}
+
+
 #pragma endregion
 
 
@@ -1065,7 +1136,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	graphicsPipelineStateDesc.InputLayout = inputLayoutDesc;													// InputLayout
 	graphicsPipelineStateDesc.VS = { vertexShaderBlob->GetBufferPointer(),vertexShaderBlob->GetBufferSize() };	// VertexDhader
 	graphicsPipelineStateDesc.PS = { pixelShaderBlob->GetBufferPointer(),pixelShaderBlob->GetBufferSize() };	// PixelShader
-	graphicsPipelineStateDesc.BlendState = blendDesc;															// BlendState
+	graphicsPipelineStateDesc.BlendState.RenderTarget[0] = blendDesc;															// BlendState
 	graphicsPipelineStateDesc.RasterizerState = rasterizerDesc;													// RasterizeerState
 
 	//レンダーターゲットの設定
@@ -1147,7 +1218,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	// Particle用のResource作成
 
 	// 描画数
-	const uint32_t kNumMaxInstance = 10;
+	const uint32_t kNumMaxInstance = 100;
 
 	// Instancing用のTransformationMatrixを作る
 	Microsoft::WRL::ComPtr<ID3D12Resource> instancingResource = CreateBufferResource(device.Get(), sizeof(ParticleForGPU) * kNumMaxInstance);
@@ -1424,21 +1495,24 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 
 	uint32_t numInstance = 0; // 描画すべきインスタンス数
 
-	// それぞれ位置が少しずつずれるように初期化する
-	Particle particles[kNumMaxInstance];
-	for (uint32_t index = 0; index < kNumMaxInstance; index++)
-	{
-		particles[index].transform.scale = { 1.0f,1.0f,1.0f };
-		particles[index].transform.rotate = { 0.0f,0.0f,0.0f };
-		particles[index].transform.translate = { index * 0.1f, index * 0.1f, index * 0.1f };
-		particles[index].color = { 1.0f, 1.0f, 1.0f, 1.0f };
+	// エミッター
+	Emitter emitter{};
+	emitter.count = 3;
+	emitter.frequency = 0.5f; // 0.5秒ごとに発生
+	emitter.frequencyTime = 0.0f; // 発生時刻用の時刻、0で初期化
 
-		particles[index] = MakeNewParticle(randomEngine);
-	}
+	emitter.transform = {
+		{1.0f, 1.0f, 1.0f},
+		{0.0f, 0.0f, 0.0f},
+		{0.0f, 0.0f, 0.0f}
+	};
+
+	// パーティクルをリストで管理する
+	std::list<Particle> particles;
 
 	//Tramsform変数を作る
 	Transform transform{ {1.0f,1.0f,1.0f},{0.0f,0.0f,0.0f},{0.0f,0.0f,0.0f} };
-	Transform cameraTransform{ {1.0f, 1.0f, 1.0f}, {std::numbers::pi_v<float> / 3.0f, std::numbers::pi_v<float>, 0.0f}, {0.0f, 0.0f, -10.0f} };
+	Transform cameraTransform{ {1.0f, 1.0f, 1.0f}, {0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, -20.0f} };
 	Transform transformSprite{ {1.0f,1.0f,1.0f},{0.0f,0.0f,0.0f},{0.0f,0.0f,0.0f} };
 
 	//UVTransform用の変数を用意
@@ -1457,8 +1531,10 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	translateMatrix.m[3][1] = 0.0f;
 	translateMatrix.m[3][2] = 0.0f;
 
-	bool goUp = false;
+	bool goUp = true;
 	bool useBillboard = false;
+
+	Log(std::format("Emitter Position: ({}, {}, {})", emitter.transform.translate.x, emitter.transform.translate.y, emitter.transform.translate.z));
 
 	//ウィンドウのｘボタンが押されるまでループ
 	while (msg.message != WM_QUIT)
@@ -1510,8 +1586,16 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 				ImGui::Checkbox("UP", &goUp);
 				ImGui::Checkbox("useBillboard", &useBillboard);
 
+				if (ImGui::Button("Add Particle"))
+				{
+					particles.splice(particles.end(), Emit(emitter, randomEngine));
+				}
+
+				ImGui::DragFloat3("EmitterTranslate", &emitter.transform.translate.x, 0.01f, -100.0f, 100.0f);
+
 				ImGui::End();
 			}
+
 			//ImGuiの内部コマンドを生成する
 			ImGui::Render();
 
@@ -1523,19 +1607,23 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 
 			// カメラの回転を適用する
 			Matrix4x4 cameraMatrix = MakeAffineMatrix(cameraTransform.scale, cameraTransform.rotate, cameraTransform.translate);
+			Matrix4x4 viewMatrix = Inverse(cameraMatrix);
+			Matrix4x4 projectionMatrix = MakePerspectiveFovMatrix(0.45f, float(kClientWidth) / float(kClientHeight), 0.1f, 100.0f);
+			Matrix4x4 viewProjectionMatrix = Multiply(viewMatrix, projectionMatrix);
+
+			// ビルボード
 			Matrix4x4 billboardMatrix = Multiply(backToFrontMatrix, cameraMatrix);
 			billboardMatrix.m[3][0] = 0.0f; // 平行移動成分はいらない
 			billboardMatrix.m[3][1] = 0.0f;
 			billboardMatrix.m[3][2] = 0.0f;
 
 			Matrix4x4 worldMatrix = MakeAffineMatrix(transform.scale, transform.rotate, transform.translate);
-			Matrix4x4 viewMatrix = Inverse(cameraMatrix);
-			Matrix4x4 projectionMatrix = MakePerspectiveFovMatrix(0.45f, float(kClientWidth) / float(kClientHeight), 0.1f, 100.0f);
-			Matrix4x4 viewProjectionMatrix = Multiply(viewMatrix, projectionMatrix);
 			Matrix4x4 worldViewProjectionMatrix = Multiply(worldMatrix, Multiply(viewMatrix, projectionMatrix));
 
 			wvpData->WVP = worldViewProjectionMatrix;
 			wvpData->World = worldMatrix;
+
+
 
 			////Sprite用のWorldViewProjectionMatrixを作る
 			//Matrix4x4 worldMatrixSprite = MakeAffineMatrix(transformSprite.scale, transformSprite.rotate, transformSprite.translate);
@@ -1552,21 +1640,20 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 			numInstance = 0;
 
 			// 板ポリ
-			for (uint32_t index = 0; index < kNumMaxInstance; ++index)
+			for (std::list<Particle>::iterator particleIterator = particles.begin(); particleIterator != particles.end(); )
 			{
-				if (particles[index].lifeTime <= particles[index].currentTIme)
+				if ((*particleIterator).lifeTime <= (*particleIterator).currentTIme)
 				{
 					// 生存時間を過ぎていたら更新せず描画対象にしない
+					particleIterator = particles.erase(particleIterator);
 					continue;
 				}
 
 				// worldMatrixを求める
-				Matrix4x4 worldMatrix = MakeAffineMatrix(particles[index].transform.scale, particles[index].transform.rotate, particles[index].transform.translate);
-				
-				scaleMatrix = MakeScaleMatrix(particles[index].transform.scale);
+				Matrix4x4 worldMatrix = MakeAffineMatrix((*particleIterator).transform.scale, (*particleIterator).transform.rotate, (*particleIterator).transform.translate);
+				scaleMatrix = MakeScaleMatrix((*particleIterator).transform.scale);
+				translateMatrix = MakeTranslateMatrix((*particleIterator).transform.translate);
 
-				translateMatrix = MakeTranslateMatrix(particles[index].transform.translate);
-				
 				// ビルボードを使うかどうか
 				if (useBillboard)
 				{
@@ -1574,24 +1661,46 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 				}
 
 				Matrix4x4 worldViewProjectionMatrix = Multiply(worldMatrix, viewProjectionMatrix);
-				instancingData[index].WVP = worldViewProjectionMatrix;
-				instancingData[index].World = worldMatrix;
+				instancingData[numInstance].WVP = worldViewProjectionMatrix;
+				instancingData[numInstance].World = worldMatrix;
 
-				float alpha = 1.0f - (particles[index].currentTIme / particles[index].lifeTime);
+				float alpha = 1.0f - ((*particleIterator).currentTIme / (*particleIterator).lifeTime);
 
 				// パーティクルの動き
 				if (goUp)
 				{
-					particles[index].transform.translate += particles[index].velocity * kDeltaTime;
-					particles[index].currentTIme += kDeltaTime; // 経過時間を足す
+					(*particleIterator).transform.translate += (*particleIterator).velocity * kDeltaTime;
+					(*particleIterator).currentTIme += kDeltaTime; // 経過時間を足す
 				}
 
-				instancingData[numInstance].WVP = worldViewProjectionMatrix;
-				instancingData[numInstance].World = worldMatrix;
-				instancingData[numInstance].color = particles[index].color;
-				instancingData[numInstance].color.w = alpha;
-				++numInstance; // 生きているParticleの数を1つカウントする
+				// 最大描画数を超えないようにする
+				if (numInstance < kNumMaxInstance)
+				{
+					instancingData[numInstance].WVP = worldViewProjectionMatrix;
+					instancingData[numInstance].World = worldMatrix;
+					instancingData[numInstance].color = (*particleIterator).color;
+					instancingData[numInstance].color.w = alpha;
+					++numInstance; // 生きているParticleの数を1つカウントする
+				}
+
+				++particleIterator; // 次のパーティクルに進める
 			}
+
+			// 頻度によって発生させる
+			emitter.frequencyTime += kDeltaTime; // 時刻を進める
+
+			// 頻度より大きいなら発生
+			if (emitter.frequency <= emitter.frequencyTime)
+			{
+				particles.splice(particles.end(), Emit(emitter, randomEngine)); // 発生処理
+				emitter.frequencyTime -= emitter.frequency; // 余計に過ぎた時間も加味して頻度計算する
+			}
+
+
+
+
+
+
 
 			// これから書き込むバックバッファのインデックスを取得
 			UINT backBufferIndex = swapChain->GetCurrentBackBufferIndex();
