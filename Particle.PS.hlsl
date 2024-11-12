@@ -7,10 +7,6 @@ struct Material
     float4x4 uvTransform;
 };
 
-ConstantBuffer<Material> gMaterial : register(b0);
-Texture2D<float4> gTexture : register(t0);
-SamplerState gSampler : register(s0);
-
 //ピクセルシェーダーの出力
 struct PixelShaderOutput
 {

@@ -1392,22 +1392,14 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 
 	uint32_t instanceCount = 10;
 
-	Transform transforms[kNumInstance];
-	for (uint32_t index = 0; index < kNumInstance; ++index)
-	{
-		transforms[index].scale = { 1.0f, 1.0f, 1.0f };
-		transforms[index].rotate = { 0.0f, 0.0f, 0.0f };
-		transforms[index].translate = { index * 0.1f,index * 0.1f,index * 0.1f };
-	}
-
 	// それぞれ位置が少しずつずれるように初期化する
-	/*Transform transforms[kNumInstance];
+	Transform transforms[kNumInstance];
 	for (uint32_t index = 0; index < kNumInstance; index++)
 	{
 		transforms[index].scale = { 1.0f,1.0f,1.0f };
 		transforms[index].rotate = { 0.0f,0.0f,0.0f };
 		transforms[index].translate = { index * 0.1f, index * 0.1f, index * 0.1f };
-	}*/
+	}
 
 	//Tramsform変数を作る
 	Transform transform{ {1.0f,1.0f,1.0f},{0.0f,0.0f,0.0f},{0.0f,0.0f,0.0f} };
@@ -1472,7 +1464,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 				ImGui::DragFloat3("directionalLight", &directionalLightData->direction.x, 0.01f);
 				ImGui::DragFloat("intensity", &directionalLightData->intensity, 0.01f);
 
-				ImGui::Checkbox("useMonsterBall", &useMonsterBall);
+				//ImGui::Checkbox("useMonsterBall", &useMonsterBall);
 				ImGui::DragFloat2("UVTranslete", &uvTransformSprite.translate.x, 0.01f, -10.0f, 10.0f);
 				ImGui::DragFloat2("UVScale", &uvTransformSprite.scale.x, 0.01f, -10.0f, 10.0f);
 
@@ -1575,10 +1567,10 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 			//マテリアルCBufferの場所を設定
 			commandList->SetGraphicsRootConstantBufferView(0, materialResource->GetGPUVirtualAddress());					// マテリアルCBVを設定
 			//commandList->SetGraphicsRootConstantBufferView(1, wvpResource->GetGPUVirtualAddress());							// WVP用CBVを設定
-			
+
 			commandList->SetGraphicsRootDescriptorTable(1, instancingSrvHandleGPU);
-			
-			commandList->SetGraphicsRootDescriptorTable(2, useMonsterBall ? textureSrvHandleGPU2 : textureSrvHandleGPU);	// SRVのディスクリプタテーブルを設定
+
+			commandList->SetGraphicsRootDescriptorTable(2, textureSrvHandleGPU2);	// SRVのディスクリプタテーブルを設定
 			//commandList->SetGraphicsRootConstantBufferView(3, directionalLightResource->GetGPUVirtualAddress());			// ライトのCBVを設定
 			commandList->DrawInstanced(UINT(modelData.vertices.size()), kNumInstance, 0, 0);								// 描画コール。三角形を描画(頂点数を変えれば球体が出るようになる「TotalVertexCount」)
 
