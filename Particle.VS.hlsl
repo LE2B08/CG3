@@ -6,6 +6,8 @@ struct TransformationMatrix
     float4x4 World;
 };
 
+StructuredBuffer<TransformationMatrix> gTransformationMatrices : register(t0);
+
 //頂点シェーダーへの入力頂点構造
 struct VertexShaderInput
 {
