@@ -1,12 +1,11 @@
 #include "Particle.hlsli"
 
-struct TransformationMatrix
+struct ParticleForGPU
 {
     float4x4 WVP;
     float4x4 World;
+    float4 color;
 };
-
-StructuredBuffer<TransformationMatrix> gTransformationMatrices : register(t0);
 
 //頂点シェーダーへの入力頂点構造
 struct VertexShaderInput
@@ -17,7 +16,7 @@ struct VertexShaderInput
     float3 normal : NORMAL0;
 };
 
-StructuredBuffer<TransformationMatrix> gTransformationMatricies : register(t0);
+StructuredBuffer<ParticleForGPU> gParticle : register(t0);
 
 //頂点シェーダー
 VertexShaderOutput main(VertexShaderInput input, uint instanceId : SV_InstanceID)
@@ -25,8 +24,9 @@ VertexShaderOutput main(VertexShaderInput input, uint instanceId : SV_InstanceID
     VertexShaderOutput output;
     
     //入力された頂点座標を出職データに代入
-    output.position = mul(input.position, gTransformationMatricies[instanceId].WVP);
+    output.position = mul(input.position, gParticle[instanceId].WVP);
     output.texcoord = input.texcoord;
-    output.normal = normalize(mul(input.normal, (float3x3) gTransformationMatricies[instanceId].World));
+    output.color = gParticle[instanceId].color;
+   
     return output;
 }
