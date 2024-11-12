@@ -34,6 +34,7 @@ extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg
 #include "Particle.h"
 #include "ParticleForGPU.h"
 #include "Emitter.h"
+#include "AccelerationField.h"
 
 #pragma comment(lib,"dxgi.lib")
 #pragma comment(lib,"dxguid.lib")
@@ -44,6 +45,12 @@ extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg
 //クライアント領域サイズ
 const int32_t kClientWidth = 1280;
 const int32_t kClientHeight = 720;
+
+struct WindZone
+{
+	AABB area; // 風が吹く範囲
+	Vector3 strength; // 風の強さ
+};
 
 enum BlendMode
 {
@@ -562,6 +569,15 @@ std::list<Particle> Emit(const Emitter& emitter, std::mt19937& randomEngine)
 
 	return particles;
 }
+
+bool IsCollision(const AABB& aabb, const Vector3& point)
+{
+	// 点がAABBの範囲内にあるかチェック
+	return (point.x >= aabb.min.x && point.x <= aabb.max.x &&
+		point.y >= aabb.min.y && point.y <= aabb.max.y &&
+		point.z >= aabb.min.z && point.z <= aabb.max.z);
+}
+
 
 // Windowsアプリでのエントリーポイント(main関数)
 int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
@@ -1486,6 +1502,11 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 		srvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
 #pragma endregion
 
+
+	bool isMove = true;
+	bool useBillboard = false;
+	bool isWindow = false;
+
 	// 乱数生成期の初期化
 	std::random_device seedGenerator;
 	std::mt19937 randomEngine(seedGenerator());
@@ -1531,10 +1552,16 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	translateMatrix.m[3][1] = 0.0f;
 	translateMatrix.m[3][2] = 0.0f;
 
-	bool goUp = true;
-	bool useBillboard = false;
+	// Fieldを作る
+	AccelerationField accelerationField;
+	accelerationField.acceleration = { 15.0f, 0.0f, 0.0f };
+	accelerationField.area.min = { -10.0f, -10.0f, -10.0f };
+	accelerationField.area.max = { 10.0f, 10.0f, 10.0f };
 
-	Log(std::format("Emitter Position: ({}, {}, {})", emitter.transform.translate.x, emitter.transform.translate.y, emitter.transform.translate.z));
+	std::vector<WindZone> windZones = {
+	{ { {-5.0f, -5.0f, -5.0f}, {5.0f, 5.0f, 5.0f} }, {0.1f, 0.0f, 0.0f} },
+	{ { {10.0f, -5.0f, -5.0f}, {15.0f, 5.0f, 5.0f} }, {0.0f, 0.0f, 0.1f} }
+	};
 
 	//ウィンドウのｘボタンが押されるまでループ
 	while (msg.message != WM_QUIT)
@@ -1583,8 +1610,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 				ImGui::SliderAngle("CameraRotateY", &cameraTransform.rotate.y);
 				ImGui::SliderAngle("CameraRotateZ", &cameraTransform.rotate.z);
 
-				ImGui::Checkbox("UP", &goUp);
+				ImGui::Checkbox("Move", &isMove);
 				ImGui::Checkbox("useBillboard", &useBillboard);
+				ImGui::Checkbox("Window", &isWindow);
 
 				if (ImGui::Button("Add Particle"))
 				{
@@ -1667,11 +1695,28 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 				float alpha = 1.0f - ((*particleIterator).currentTIme / (*particleIterator).lifeTime);
 
 				// パーティクルの動き
-				if (goUp)
+				if (isMove)
 				{
+					// 速度を適用
 					(*particleIterator).transform.translate += (*particleIterator).velocity * kDeltaTime;
 					(*particleIterator).currentTIme += kDeltaTime; // 経過時間を足す
 				}
+
+				if (isWindow)
+				{
+					// フィールドの範囲内のパーティクルには加速度を適用する
+						// 各パーティクルに最適な風を適用
+					for (const auto& zone : windZones) {
+						if (IsCollision(accelerationField.area, (*particleIterator).transform.translate)) {
+							(*particleIterator).velocity.x += zone.strength.x;
+							(*particleIterator).velocity.y += zone.strength.y;
+							(*particleIterator).velocity.z += zone.strength.z;
+						}
+					}
+
+				}
+
+
 
 				// 最大描画数を超えないようにする
 				if (numInstance < kNumMaxInstance)
