@@ -10,6 +10,7 @@
 #include <sstream>
 #include <wrl.h>
 #include <random>
+#include <numbers>
 
 #include "externals/DirectXTex/DirectXTex.h"
 
@@ -547,6 +548,7 @@ Particle MakeNewParticle(std::mt19937& randomEngine)
 	particle.velocity = { distribution(randomEngine),distribution(randomEngine),distribution(randomEngine) };
 	return particle;
 }
+
 
 
 // Windowsアプリでのエントリーポイント(main関数)
@@ -1239,7 +1241,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	modelData.vertices.push_back({ .position = {1.0f, -1.0f, 0.0f, 1.0f}, .texcoord = {1.0f, 1.0f}, .normal = {0.0f, 0.0f, 1.0f} }); // 右下
 
 	// テクスチャの設定
-	modelData.material.textureFilePath = "./resources/particle.png";
+	modelData.material.textureFilePath = "./resources/uvChecker.png";
 
 	//Textureを読んで転送する
 	DirectX::ScratchImage mipImages = LoadTexture("resources/uvChecker.png");
@@ -1430,19 +1432,33 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 		particles[index].transform.rotate = { 0.0f,0.0f,0.0f };
 		particles[index].transform.translate = { index * 0.1f, index * 0.1f, index * 0.1f };
 		particles[index].color = { 1.0f, 1.0f, 1.0f, 1.0f };
-		
+
 		particles[index] = MakeNewParticle(randomEngine);
 	}
 
 	//Tramsform変数を作る
 	Transform transform{ {1.0f,1.0f,1.0f},{0.0f,0.0f,0.0f},{0.0f,0.0f,0.0f} };
-	Transform cameraTransform{ {1.0f,1.0f,1.0f},{0.0f,0.0f,0.0f},{0.0f,0.0f,-10.0f} };
+	Transform cameraTransform{ {1.0f, 1.0f, 1.0f}, {std::numbers::pi_v<float> / 3.0f, std::numbers::pi_v<float>, 0.0f}, {0.0f, 0.0f, -10.0f} };
 	Transform transformSprite{ {1.0f,1.0f,1.0f},{0.0f,0.0f,0.0f},{0.0f,0.0f,0.0f} };
 
 	//UVTransform用の変数を用意
 	Transform uvTransformSprite{ {1.0f,1.0f,1.0f}, {0.0f,0.0f,0.0f}, {0.0f,0.0f,0.0f}, };
 
+	// Y軸でπ/2回転させる
+	Matrix4x4 backToFrontMatrix = MakeIdentity();
+
+	Matrix4x4 scaleMatrix{};
+	scaleMatrix.m[3][0] = 0.0f;
+	scaleMatrix.m[3][1] = 0.0f;
+	scaleMatrix.m[3][2] = 0.0f;
+
+	Matrix4x4 translateMatrix{};
+	translateMatrix.m[3][0] = 0.0f;
+	translateMatrix.m[3][1] = 0.0f;
+	translateMatrix.m[3][2] = 0.0f;
+
 	bool goUp = false;
+	bool useBillboard = false;
 
 	//ウィンドウのｘボタンが押されるまでループ
 	while (msg.message != WM_QUIT)
@@ -1492,6 +1508,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 				ImGui::SliderAngle("CameraRotateZ", &cameraTransform.rotate.z);
 
 				ImGui::Checkbox("UP", &goUp);
+				ImGui::Checkbox("useBillboard", &useBillboard);
 
 				ImGui::End();
 			}
@@ -1503,9 +1520,16 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 			//transform.rotate.y += 0.03f;
 
 			/*-----Transform情報を作る-----*/
+
+			// カメラの回転を適用する
+			Matrix4x4 cameraMatrix = MakeAffineMatrix(cameraTransform.scale, cameraTransform.rotate, cameraTransform.translate);
+			Matrix4x4 billboardMatrix = Multiply(backToFrontMatrix, cameraMatrix);
+			billboardMatrix.m[3][0] = 0.0f; // 平行移動成分はいらない
+			billboardMatrix.m[3][1] = 0.0f;
+			billboardMatrix.m[3][2] = 0.0f;
+
 			Matrix4x4 worldMatrix = MakeAffineMatrix(transform.scale, transform.rotate, transform.translate);
-			Matrix4x4 camraMatrix = MakeAffineMatrix(cameraTransform.scale, cameraTransform.rotate, cameraTransform.translate);
-			Matrix4x4 viewMatrix = Inverse(camraMatrix);
+			Matrix4x4 viewMatrix = Inverse(cameraMatrix);
 			Matrix4x4 projectionMatrix = MakePerspectiveFovMatrix(0.45f, float(kClientWidth) / float(kClientHeight), 0.1f, 100.0f);
 			Matrix4x4 viewProjectionMatrix = Multiply(viewMatrix, projectionMatrix);
 			Matrix4x4 worldViewProjectionMatrix = Multiply(worldMatrix, Multiply(viewMatrix, projectionMatrix));
@@ -1513,17 +1537,17 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 			wvpData->WVP = worldViewProjectionMatrix;
 			wvpData->World = worldMatrix;
 
-			//Sprite用のWorldViewProjectionMatrixを作る
-			Matrix4x4 worldMatrixSprite = MakeAffineMatrix(transformSprite.scale, transformSprite.rotate, transformSprite.translate);
-			Matrix4x4 viewMatrixSprite = MakeIdentity();
-			Matrix4x4 projectionMatrixSprite = MakeOrthographicMatrix(0.0f, 0.0f, float(kClientWidth), float(kClientHeight), 0.0f, 100.0f);
-			Matrix4x4 worldViewProjectionMatrixSprite = Multiply(worldMatrixSprite, Multiply(viewMatrixSprite, projectionMatrixSprite));
+			////Sprite用のWorldViewProjectionMatrixを作る
+			//Matrix4x4 worldMatrixSprite = MakeAffineMatrix(transformSprite.scale, transformSprite.rotate, transformSprite.translate);
+			//Matrix4x4 viewMatrixSprite = MakeIdentity();
+			//Matrix4x4 projectionMatrixSprite = MakeOrthographicMatrix(0.0f, 0.0f, float(kClientWidth), float(kClientHeight), 0.0f, 100.0f);
+			//Matrix4x4 worldViewProjectionMatrixSprite = Multiply(worldMatrixSprite, Multiply(viewMatrixSprite, projectionMatrixSprite));
 
-			transformationMatrixDataSprite->WVP = worldViewProjectionMatrixSprite;
-			transformationMatrixDataSprite->World = worldMatrixSprite;
+			//transformationMatrixDataSprite->WVP = worldViewProjectionMatrixSprite;
+			//transformationMatrixDataSprite->World = worldMatrixSprite;
 
-			Matrix4x4 uvTransformMatrix = MakeAffineMatrix(uvTransformSprite.scale, uvTransformSprite.rotate, uvTransformSprite.translate);
-			materialDataSprite->uvTransform = uvTransformMatrix;
+			//Matrix4x4 uvTransformMatrix = MakeAffineMatrix(uvTransformSprite.scale, uvTransformSprite.rotate, uvTransformSprite.translate);
+			//materialDataSprite->uvTransform = uvTransformMatrix;
 
 			numInstance = 0;
 
@@ -1538,23 +1562,35 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 
 				// worldMatrixを求める
 				Matrix4x4 worldMatrix = MakeAffineMatrix(particles[index].transform.scale, particles[index].transform.rotate, particles[index].transform.translate);
+				
+				scaleMatrix = MakeScaleMatrix(particles[index].transform.scale);
+
+				translateMatrix = MakeTranslateMatrix(particles[index].transform.translate);
+				
+				// ビルボードを使うかどうか
+				if (useBillboard)
+				{
+					worldMatrix = scaleMatrix * billboardMatrix * translateMatrix;
+				}
+
 				Matrix4x4 worldViewProjectionMatrix = Multiply(worldMatrix, viewProjectionMatrix);
 				instancingData[index].WVP = worldViewProjectionMatrix;
 				instancingData[index].World = worldMatrix;
 
 				float alpha = 1.0f - (particles[index].currentTIme / particles[index].lifeTime);
-				
+
 				// パーティクルの動き
 				if (goUp)
 				{
 					particles[index].transform.translate += particles[index].velocity * kDeltaTime;
 					particles[index].currentTIme += kDeltaTime; // 経過時間を足す
-					instancingData[numInstance].WVP = worldViewProjectionMatrix;
-					instancingData[numInstance].World = worldMatrix;
-					instancingData[numInstance].color = particles[index].color;
-					instancingData[numInstance].color.w = alpha;
-					++numInstance; // 生きているParticleの数を1つカウントする
 				}
+
+				instancingData[numInstance].WVP = worldViewProjectionMatrix;
+				instancingData[numInstance].World = worldMatrix;
+				instancingData[numInstance].color = particles[index].color;
+				instancingData[numInstance].color.w = alpha;
+				++numInstance; // 生きているParticleの数を1つカウントする
 			}
 
 			// これから書き込むバックバッファのインデックスを取得
