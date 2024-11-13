@@ -1505,7 +1505,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 
 	bool isMove = true;
 	bool useBillboard = false;
-	bool isWindow = false;
+	bool isWind = false;
 
 	// 乱数生成期の初期化
 	std::random_device seedGenerator;
@@ -1612,7 +1612,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 
 				ImGui::Checkbox("Move", &isMove);
 				ImGui::Checkbox("useBillboard", &useBillboard);
-				ImGui::Checkbox("Window", &isWindow);
+				ImGui::Checkbox("Wind", &isWind);
 
 				if (ImGui::Button("Add Particle"))
 				{
@@ -1702,7 +1702,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 					(*particleIterator).currentTIme += kDeltaTime; // 経過時間を足す
 				}
 
-				if (isWindow)
+				if (isWind)
 				{
 					// フィールドの範囲内のパーティクルには加速度を適用する
 						// 各パーティクルに最適な風を適用
