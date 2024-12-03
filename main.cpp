@@ -570,6 +570,7 @@ std::list<Particle> Emit(const Emitter& emitter, std::mt19937& randomEngine)
 	return particles;
 }
 
+// 当たり判定
 bool IsCollision(const AABB& aabb, const Vector3& point)
 {
 	// 点がAABBの範囲内にあるかチェック
@@ -577,7 +578,6 @@ bool IsCollision(const AABB& aabb, const Vector3& point)
 		point.y >= aabb.min.y && point.y <= aabb.max.y &&
 		point.z >= aabb.min.z && point.z <= aabb.max.z);
 }
-
 
 // Windowsアプリでのエントリーポイント(main関数)
 int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
@@ -712,10 +712,10 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 		//エラー時に止まる
 		infoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_ERROR, true);
 
-		/*全部の情報を出す
+		/*全部の情報を出す*/
+
 		//警告時に止まる
 		infoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_WARNING, true);
-		*/
 
 		//抑制するメッセージのID
 		D3D12_MESSAGE_ID denyIds[] =
@@ -874,34 +874,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	//RootSignature作成
 	D3D12_ROOT_SIGNATURE_DESC descriptionRootSignature{};
 	descriptionRootSignature.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
-
-	////DescriptorRange作成
-	//D3D12_DESCRIPTOR_RANGE descriptorRange[1] = {};
-	//descriptorRange[0].BaseShaderRegister = 0;														// 0から始まる
-	//descriptorRange[0].NumDescriptors = 1;															// 数は1つ
-	//descriptorRange[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;									// SRVを使う
-	//descriptorRange[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;	// Offsetを自動計算
-
-	////RootParameter作成。複数設定できるので配列。今回は1つだけなので長さ１の配列
-	//D3D12_ROOT_PARAMETER rootParameters[4] = {};
-	//rootParameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;								// CBVを使う
-	//rootParameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;								// PixelShaderを使う
-	//rootParameters[0].Descriptor.ShaderRegister = 0;												// レジスタ番号０とバインド
-
-	//rootParameters[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;								// CBVを使う
-	//rootParameters[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;							// VertexShaderを使う
-	//rootParameters[1].Descriptor.ShaderRegister = 0;												// レジスタ番号０を使う
-
-	//rootParameters[2].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;					// DescriptorTableを使う
-	//rootParameters[2].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;								// PixelShaderで使う
-	//rootParameters[2].DescriptorTable.pDescriptorRanges = descriptorRange;							// Tableの中身の配列を指定
-	//rootParameters[2].DescriptorTable.NumDescriptorRanges = _countof(descriptorRange);				// Tableで利用する数
-
-	//rootParameters[3].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;								// CBVを使う
-	//rootParameters[3].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;								// PixelShaderを使う
-	//rootParameters[3].Descriptor.ShaderRegister = 1;												// レジスタ番号1を使う
-	//descriptionRootSignature.pParameters = rootParameters;											// ルートパラメータ配列へのポインタ
-	//descriptionRootSignature.NumParameters = _countof(rootParameters);								// 配列の長さ
 #pragma endregion
 
 	// Particle用のRootSignature
@@ -915,12 +887,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	rootParameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;								// CBVを使う
 	rootParameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;								// PixelShaderを使う
 	rootParameters[0].Descriptor.ShaderRegister = 0;												// レジスタ番号０とバインド
-
-	//rootParameters[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;								// CBVを使う
-	//rootParameters[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;							// VertexShaderを使う
-	//rootParameters[1].Descriptor.ShaderRegister = 0;												// レジスタ番号０を使う
-	//rootParameters[1].DescriptorTable.pDescriptorRanges = descriptorRangeForInstancing;				// Tableの中身の配列を指定
-	//rootParameters[1].DescriptorTable.NumDescriptorRanges = _countof(descriptorRangeForInstancing); // Tableで利用する
 
 	rootParameters[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;					// DescriptorTableを使う
 	rootParameters[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;							// VertexShaderで使う
@@ -967,27 +933,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 
 
 #pragma region InputLayoutの設定を行う・InputLayoutの拡張
-	////InputLayout
-	//D3D12_INPUT_ELEMENT_DESC inputElementDescs[3] = {};
-	//inputElementDescs[0].SemanticName = "POSITION";
-	//inputElementDescs[0].SemanticIndex = 0;
-	//inputElementDescs[0].Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
-	//inputElementDescs[0].AlignedByteOffset = D3D12_APPEND_ALIGNED_ELEMENT;
-
-	//inputElementDescs[1].SemanticName = "TEXCOORD";
-	//inputElementDescs[1].SemanticIndex = 0;
-	//inputElementDescs[1].Format = DXGI_FORMAT_R32G32_FLOAT;
-	//inputElementDescs[1].AlignedByteOffset = D3D12_APPEND_ALIGNED_ELEMENT;
-
-	//inputElementDescs[2].SemanticName = "NORMAL";
-	//inputElementDescs[2].SemanticIndex = 0;
-	//inputElementDescs[2].Format = DXGI_FORMAT_R32G32B32_FLOAT;
-	//inputElementDescs[2].AlignedByteOffset = D3D12_APPEND_ALIGNED_ELEMENT;
-
-	//D3D12_INPUT_LAYOUT_DESC inputLayoutDesc{};
-	//inputLayoutDesc.pInputElementDescs = inputElementDescs;
-	//inputLayoutDesc.NumElements = _countof(inputElementDescs);
-//InputLayout
 	D3D12_INPUT_ELEMENT_DESC inputElementDescs[3] = {};
 	inputElementDescs[0].SemanticName = "POSITION";
 	inputElementDescs[0].SemanticIndex = 0;
@@ -1015,91 +960,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	D3D12_RENDER_TARGET_BLEND_DESC blendDesc{};
 
 	// ブレンドするかしないか
-	//blendDesc.BlendEnable = false;
+	blendDesc.BlendEnable = false;
 	// すべての色要素を書き込む
 	blendDesc.RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
-
-	// 各ブレンドモードの設定を行う
-	switch (currentBlendMode)
-	{
-		// ブレンドモードなし
-	case BlendMode::kBlendModeNone:
-
-		blendDesc.BlendEnable = false;
-		break;
-
-		// 通常αブレンドモード
-	case BlendMode::kBlendModeNormal:
-
-		// ノーマル
-		blendDesc.BlendEnable = true;
-		blendDesc.SrcBlend = D3D12_BLEND_SRC_ALPHA;
-		blendDesc.BlendOp = D3D12_BLEND_OP_ADD;
-		blendDesc.DestBlend = D3D12_BLEND_INV_SRC_ALPHA;
-		blendDesc.SrcBlendAlpha = D3D12_BLEND_ONE;
-		blendDesc.BlendOpAlpha = D3D12_BLEND_OP_ADD;
-		blendDesc.DestBlendAlpha = D3D12_BLEND_ZERO;
-		break;
-
-		// 加算ブレンドモード
-	case BlendMode::kBlendModeAdd:
-
-		// 加算
-		blendDesc.BlendEnable = true;
-		blendDesc.SrcBlend = D3D12_BLEND_SRC_ALPHA;
-		blendDesc.BlendOp = D3D12_BLEND_OP_ADD;
-		blendDesc.DestBlend = D3D12_BLEND_ONE;
-		blendDesc.SrcBlendAlpha = D3D12_BLEND_ONE;		  // アルファのソースはそのまま
-		blendDesc.BlendOpAlpha = D3D12_BLEND_OP_ADD;	  // アルファの加算操作
-		blendDesc.DestBlendAlpha = D3D12_BLEND_ZERO;	  // アルファのデスティネーションは無視
-		break;
-
-		// 減算ブレンドモード
-	case BlendMode::kBlendModeSubtract:
-
-		// 減算
-		blendDesc.BlendEnable = true;
-		blendDesc.SrcBlend = D3D12_BLEND_SRC_ALPHA;
-		blendDesc.BlendOp = D3D12_BLEND_OP_REV_SUBTRACT;
-		blendDesc.DestBlend = D3D12_BLEND_ONE;
-		blendDesc.SrcBlendAlpha = D3D12_BLEND_ONE;		 // アルファのソースはそのまま
-		blendDesc.BlendOpAlpha = D3D12_BLEND_OP_ADD;	 // アルファの加算操作
-		blendDesc.DestBlendAlpha = D3D12_BLEND_ZERO;	 // アルファのデスティネーションは無
-		break;
-
-		// 乗算ブレンドモード
-	case BlendMode::kBlendModeMultiply:
-
-		// 乗算
-		blendDesc.BlendEnable = true;
-		blendDesc.SrcBlend = D3D12_BLEND_ZERO;
-		blendDesc.BlendOp = D3D12_BLEND_OP_ADD;
-		blendDesc.DestBlend = D3D12_BLEND_SRC_COLOR;
-		blendDesc.SrcBlendAlpha = D3D12_BLEND_ONE;		 // アルファのソースはそのまま
-		blendDesc.BlendOpAlpha = D3D12_BLEND_OP_ADD;	 // アルファの加算操作
-		blendDesc.DestBlendAlpha = D3D12_BLEND_ZERO;	 // アルファのデスティネーションは無視
-		break;
-
-		// スクリーンブレンドモード
-	case BlendMode::kBlendModeScreen:
-
-		// スクリーン
-		blendDesc.BlendEnable = true;
-		blendDesc.SrcBlend = D3D12_BLEND_INV_DEST_COLOR;
-		blendDesc.BlendOp = D3D12_BLEND_OP_ADD;
-		blendDesc.DestBlend = D3D12_BLEND_ONE;
-		blendDesc.SrcBlendAlpha = D3D12_BLEND_ONE;		 // アルファのソースはそのまま
-		blendDesc.BlendOpAlpha = D3D12_BLEND_OP_ADD;	 // アルファの加算操作
-		blendDesc.DestBlendAlpha = D3D12_BLEND_ZERO;	 // アルファのデスティネーションは無視
-		break;
-
-		// 無効なブレンドモード
-	default:
-		// 無効なモードの処理
-		assert(false && "Invalid Blend Mode");
-		break;
-	}
-
 
 #pragma endregion
 
@@ -1115,14 +978,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 
 
 #pragma region ShaderをCompileする
-	////Shaderをコンパイルする
-	//Microsoft::WRL::ComPtr <IDxcBlob> vertexShaderBlob = CompilerShader(L"Object3D.VS.hlsl", L"vs_6_0", dxcUtils.Get(), dxcCompiler, includeHandler.Get());
-	//assert(vertexShaderBlob != nullptr);
-
-	////Pixelをコンパイルする
-	//Microsoft::WRL::ComPtr <IDxcBlob> pixelShaderBlob = CompilerShader(L"Object3D.PS.hlsl", L"ps_6_0", dxcUtils.Get(), dxcCompiler, includeHandler.Get());
-	//assert(pixelShaderBlob != nullptr);
-
 	//Shaderをコンパイルする
 	Microsoft::WRL::ComPtr <IDxcBlob> vertexShaderBlob = CompilerShader(L"Particle.VS.hlsl", L"vs_6_0", dxcUtils.Get(), dxcCompiler, includeHandler.Get());
 	assert(vertexShaderBlob != nullptr);
@@ -1410,26 +1265,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 
 	// モデルデータの頂点データをコピー
 	std::memcpy(vertexData, modelData.vertices.data(), sizeof(VertexData) * modelData.vertices.size());
-	////左下
-	//vertexData[0].position = { -0.5f,-0.5f,0.0f,1.0f };
-	//vertexData[0].texcoord = { 0.0f,1.0f };
-	////上
-	//vertexData[1].position = { 0.0f,0.5f,0.0f,1.0f };
-	//vertexData[1].texcoord = { 0.5f,0.0f };
-	////右下
-	//vertexData[2].position = { 0.5f,-0.5f,0.0f,1.0f };
-	//vertexData[2].texcoord = { 1.0f,1.0f };
-
-	////左下2
-	//vertexData[3].position = { -0.5f,-0.5f,0.5f,1.0f };
-	//vertexData[3].texcoord = { 0.0f,1.0f };
-	////上2
-	//vertexData[4].position = { 0.0f,0.0f,0.0f,1.0f };
-	//vertexData[4].texcoord = { 0.5f,0.0f };
-	////右下2
-	//vertexData[5].position = { 0.5f,-0.5f,-0.5f,1.0f };
-	//vertexData[5].texcoord = { 1.0f,1.0f };
-	// Resourceにデータを書き込む・頂点データの更新
 
 	// 球体の頂点データをコピー
 	VertexData* sphereVertexData = vertexData + modelData.vertices.size();
@@ -1579,25 +1414,108 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 			ImGui_ImplWin32_NewFrame();
 			ImGui::NewFrame();
 
+			
+			// ImGuiウィジェットの作成（描画ループ内）
+			ImGui::Begin("Settings");
+			
 			ImGui::ColorEdit4("color", &materialData->color.x);
 
-			// ImGui の ComboBox を使用して選択肢を表示します
-			if (ImGui::BeginCombo("Select Option", blendModeNames[currentBlendMode]))
-			{
-				for (int n = 0; n < kcountOfBlendMode; n++)
+			if (ImGui::Combo("Blend Mode", reinterpret_cast<int*>(&currentBlendMode), blendModeNames, kcountOfBlendMode)) {
+				// ブレンドモードが変更されたときに、パイプラインステートを再構築する処理を追加
+				//BlendStateの設定
+				D3D12_RENDER_TARGET_BLEND_DESC blendDesc{};
+
+				// ブレンドするかしないか
+				//blendDesc.BlendEnable = false;
+				// すべての色要素を書き込む
+				blendDesc.RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
+
+				// 各ブレンドモードの設定を行う
+				switch (currentBlendMode)
 				{
-					bool isSelected = (currentBlendMode == n);
-					if (ImGui::Selectable(blendModeNames[n], isSelected))
-					{
-						currentBlendMode = static_cast<BlendMode>(n);
-					}
-					if (isSelected)
-					{
-						ImGui::SetItemDefaultFocus(); // 選択中の項目にフォーカスを設定します
-					}
+					// ブレンドモードなし
+				case BlendMode::kBlendModeNone:
+
+					blendDesc.BlendEnable = false;
+					break;
+
+					// 通常αブレンドモード
+				case BlendMode::kBlendModeNormal:
+
+					// ノーマル
+					blendDesc.BlendEnable = true;
+					blendDesc.SrcBlend = D3D12_BLEND_SRC_ALPHA;
+					blendDesc.BlendOp = D3D12_BLEND_OP_ADD;
+					blendDesc.DestBlend = D3D12_BLEND_INV_SRC_ALPHA;
+					blendDesc.SrcBlendAlpha = D3D12_BLEND_ONE;
+					blendDesc.BlendOpAlpha = D3D12_BLEND_OP_ADD;
+					blendDesc.DestBlendAlpha = D3D12_BLEND_ZERO;
+					break;
+
+					// 加算ブレンドモード
+				case BlendMode::kBlendModeAdd:
+
+					// 加算
+					blendDesc.BlendEnable = true;
+					blendDesc.SrcBlend = D3D12_BLEND_SRC_ALPHA;
+					blendDesc.BlendOp = D3D12_BLEND_OP_ADD;
+					blendDesc.DestBlend = D3D12_BLEND_ONE;
+					blendDesc.SrcBlendAlpha = D3D12_BLEND_ONE;		  // アルファのソースはそのまま
+					blendDesc.BlendOpAlpha = D3D12_BLEND_OP_ADD;	  // アルファの加算操作
+					blendDesc.DestBlendAlpha = D3D12_BLEND_ZERO;	  // アルファのデスティネーションは無視
+					break;
+
+					// 減算ブレンドモード
+				case BlendMode::kBlendModeSubtract:
+
+					// 減算
+					blendDesc.BlendEnable = true;
+					blendDesc.SrcBlend = D3D12_BLEND_SRC_ALPHA;
+					blendDesc.BlendOp = D3D12_BLEND_OP_REV_SUBTRACT;
+					blendDesc.DestBlend = D3D12_BLEND_ONE;
+					blendDesc.SrcBlendAlpha = D3D12_BLEND_ONE;		 // アルファのソースはそのまま
+					blendDesc.BlendOpAlpha = D3D12_BLEND_OP_ADD;	 // アルファの加算操作
+					blendDesc.DestBlendAlpha = D3D12_BLEND_ZERO;	 // アルファのデスティネーションは無
+					break;
+
+					// 乗算ブレンドモード
+				case BlendMode::kBlendModeMultiply:
+
+					// 乗算
+					blendDesc.BlendEnable = true;
+					blendDesc.SrcBlend = D3D12_BLEND_ZERO;
+					blendDesc.BlendOp = D3D12_BLEND_OP_ADD;
+					blendDesc.DestBlend = D3D12_BLEND_SRC_COLOR;
+					blendDesc.SrcBlendAlpha = D3D12_BLEND_ONE;		 // アルファのソースはそのまま
+					blendDesc.BlendOpAlpha = D3D12_BLEND_OP_ADD;	 // アルファの加算操作
+					blendDesc.DestBlendAlpha = D3D12_BLEND_ZERO;	 // アルファのデスティネーションは無視
+					break;
+
+					// スクリーンブレンドモード
+				case BlendMode::kBlendModeScreen:
+
+					// スクリーン
+					blendDesc.BlendEnable = true;
+					blendDesc.SrcBlend = D3D12_BLEND_INV_DEST_COLOR;
+					blendDesc.BlendOp = D3D12_BLEND_OP_ADD;
+					blendDesc.DestBlend = D3D12_BLEND_ONE;
+					blendDesc.SrcBlendAlpha = D3D12_BLEND_ONE;		 // アルファのソースはそのまま
+					blendDesc.BlendOpAlpha = D3D12_BLEND_OP_ADD;	 // アルファの加算操作
+					blendDesc.DestBlendAlpha = D3D12_BLEND_ZERO;	 // アルファのデスティネーションは無視
+					break;
+
+					// 無効なブレンドモード
+				default:
+					// 無効なモードの処理
+					assert(false && "Invalid Blend Mode");
+					break;
 				}
-				ImGui::EndCombo();
+
+				// グラフィックスパイプラインステートを更新
+				graphicsPipelineStateDesc.BlendState.RenderTarget[0] = blendDesc;
+				device->CreateGraphicsPipelineState(&graphicsPipelineStateDesc, IID_PPV_ARGS(&graphicsPipelineState));
 			}
+			ImGui::End();
 
 			//開発用のUIの処理。実際に開発用のUIを出す場合はここをゲーム固有の処理に置き換える
 			ImGui::ShowDemoWindow();
@@ -1651,20 +1569,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 			wvpData->WVP = worldViewProjectionMatrix;
 			wvpData->World = worldMatrix;
 
-
-
-			////Sprite用のWorldViewProjectionMatrixを作る
-			//Matrix4x4 worldMatrixSprite = MakeAffineMatrix(transformSprite.scale, transformSprite.rotate, transformSprite.translate);
-			//Matrix4x4 viewMatrixSprite = MakeIdentity();
-			//Matrix4x4 projectionMatrixSprite = MakeOrthographicMatrix(0.0f, 0.0f, float(kClientWidth), float(kClientHeight), 0.0f, 100.0f);
-			//Matrix4x4 worldViewProjectionMatrixSprite = Multiply(worldMatrixSprite, Multiply(viewMatrixSprite, projectionMatrixSprite));
-
-			//transformationMatrixDataSprite->WVP = worldViewProjectionMatrixSprite;
-			//transformationMatrixDataSprite->World = worldMatrixSprite;
-
-			//Matrix4x4 uvTransformMatrix = MakeAffineMatrix(uvTransformSprite.scale, uvTransformSprite.rotate, uvTransformSprite.translate);
-			//materialDataSprite->uvTransform = uvTransformMatrix;
-
 			numInstance = 0;
 
 			// 板ポリ
@@ -1716,8 +1620,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 
 				}
 
-
-
 				// 最大描画数を超えないようにする
 				if (numInstance < kNumMaxInstance)
 				{
@@ -1740,12 +1642,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 				particles.splice(particles.end(), Emit(emitter, randomEngine)); // 発生処理
 				emitter.frequencyTime -= emitter.frequency; // 余計に過ぎた時間も加味して頻度計算する
 			}
-
-
-
-
-
-
 
 			// これから書き込むバックバッファのインデックスを取得
 			UINT backBufferIndex = swapChain->GetCurrentBackBufferIndex();
@@ -1770,7 +1666,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 			D3D12_CPU_DESCRIPTOR_HANDLE dsvHandle = dsvDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
 			commandList->OMSetRenderTargets(1, &rtvHandles[backBufferIndex], false, &dsvHandle);
 			//指定した色で画面全体をクリアする
-			float clearColor[] = { 0.1f,0.25f,0.5f,1.0f };	//青っぽい色。RGBAの順
+			float clearColor[] = { 0.0f,0.0f,0.0f,1.0f };	//青っぽい色。RGBAの順
 			commandList->ClearRenderTargetView(rtvHandles[backBufferIndex], clearColor, 0, nullptr);
 			//指定した深度で画面全体をクリアする
 			commandList->ClearDepthStencilView(dsvHandle, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
@@ -1800,22 +1696,15 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 			//定数バッファビュー (CBV) とディスクリプタテーブルの設定
 			//マテリアルCBufferの場所を設定
 			commandList->SetGraphicsRootConstantBufferView(0, materialResource->GetGPUVirtualAddress());					// マテリアルCBVを設定
-			//commandList->SetGraphicsRootConstantBufferView(1, wvpResource->GetGPUVirtualAddress());							// WVP用CBVを設定
 
 			commandList->SetGraphicsRootDescriptorTable(1, instancingSrvHandleGPU);
 
 			commandList->SetGraphicsRootDescriptorTable(2, textureSrvHandleGPU2);	// SRVのディスクリプタテーブルを設定
-			//commandList->SetGraphicsRootConstantBufferView(3, directionalLightResource->GetGPUVirtualAddress());			// ライトのCBVを設定
+
 			commandList->DrawInstanced(UINT(modelData.vertices.size()), numInstance, 0, 0);								// 描画コール。三角形を描画(頂点数を変えれば球体が出るようになる「TotalVertexCount」)
 
 			commandList->SetGraphicsRootDescriptorTable(2, textureSrvHandleGPU);
 
-			//スプライトの描画設定
-			//commandList->IASetVertexBuffers(0, 1, &vertexBufferViewSprite);													// スプライトの頂点バッファビューを設定
-			//commandList->IASetIndexBuffer(&indexBufferViewSprite);															// IBVの設定
-			//commandList->SetGraphicsRootConstantBufferView(0, materialResourceSprite->GetGPUVirtualAddress());				// スプライトのマテリアルCBVを設定
-			//commandList->SetGraphicsRootConstantBufferView(1, transfomationMatrixResourceSprite->GetGPUVirtualAddress());	// スプライトのトランスフォーメーション行列CBVを設定
-			////commandList->DrawIndexedInstanced(6, 1, 0, 0, 0);																// インデックスのスプライトの描画コール
 #pragma endregion
 
 
