@@ -899,36 +899,93 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 
 #pragma region BlendStateの設定を行う
 	//BlendStateの設定
-	D3D12_BLEND_DESC blendDesc{};
-	// ノーマル
-	blendDesc.RenderTarget[0].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
-	blendDesc.RenderTarget[0].BlendEnable = TRUE;
-	blendDesc.RenderTarget[0].SrcBlend = D3D12_BLEND_SRC_ALPHA;
-	blendDesc.RenderTarget[0].BlendOp = D3D12_BLEND_OP_ADD;
-	blendDesc.RenderTarget[0].DestBlend = D3D12_BLEND_INV_SRC_ALPHA;
-	blendDesc.RenderTarget[0].SrcBlendAlpha = D3D12_BLEND_ONE;
-	blendDesc.RenderTarget[0].BlendOpAlpha = D3D12_BLEND_OP_ADD;
-	blendDesc.RenderTarget[0].DestBlendAlpha = D3D12_BLEND_ZERO;
+	D3D12_RENDER_TARGET_BLEND_DESC blendDesc{};
 
-	//// 加算
-	//blendDesc.RenderTarget[0].SrcBlendAlpha = D3D12_BLEND_ONE;		  // アルファのソースはそのまま
-	//blendDesc.RenderTarget[0].BlendOpAlpha = D3D12_BLEND_OP_ADD;	  // アルファの加算操作
-	//blendDesc.RenderTarget[0].DestBlendAlpha = D3D12_BLEND_ZERO;	  // アルファのデスティネーションは無視
+	// ブレンドするかしないか
+	blendDesc.BlendEnable = false;
+	// すべての色要素を書き込む
+	blendDesc.RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
 
-	//// 減算
-	//blendDesc.RenderTarget[0].SrcBlendAlpha = D3D12_BLEND_ONE;		 // アルファのソースはそのまま
-	//blendDesc.RenderTarget[0].BlendOpAlpha = D3D12_BLEND_OP_ADD;	 // アルファの加算操作
-	//blendDesc.RenderTarget[0].DestBlendAlpha = D3D12_BLEND_ZERO;	 // アルファのデスティネーションは無視
+	// 各ブレンドモードの設定を行う
+	switch (currentBlendMode)
+	{
+		// ブレンドモードなし
+	case BlendMode::kBlendModeNone:
 
-	//// 乗算
-	//blendDesc.RenderTarget[0].SrcBlendAlpha = D3D12_BLEND_ONE;		 // アルファのソースはそのまま
-	//blendDesc.RenderTarget[0].BlendOpAlpha = D3D12_BLEND_OP_ADD;	 // アルファの加算操作
-	//blendDesc.RenderTarget[0].DestBlendAlpha = D3D12_BLEND_ZERO;	 // アルファのデスティネーションは無視
+		blendDesc.BlendEnable = false;
+		break;
 
-	//// スクリーン
-	//blendDesc.RenderTarget[0].SrcBlendAlpha = D3D12_BLEND_ONE;		 // アルファのソースはそのまま
-	//blendDesc.RenderTarget[0].BlendOpAlpha = D3D12_BLEND_OP_ADD;	 // アルファの加算操作
-	//blendDesc.RenderTarget[0].DestBlendAlpha = D3D12_BLEND_ZERO;	 // アルファのデスティネーションは無視
+		// 通常αブレンドモード
+	case BlendMode::kBlendModeNormal:
+
+		// ノーマル
+		blendDesc.BlendEnable = true;
+		blendDesc.SrcBlend = D3D12_BLEND_SRC_ALPHA;
+		blendDesc.BlendOp = D3D12_BLEND_OP_ADD;
+		blendDesc.DestBlend = D3D12_BLEND_INV_SRC_ALPHA;
+		blendDesc.SrcBlendAlpha = D3D12_BLEND_ONE;
+		blendDesc.BlendOpAlpha = D3D12_BLEND_OP_ADD;
+		blendDesc.DestBlendAlpha = D3D12_BLEND_ZERO;
+		break;
+
+		// 加算ブレンドモード
+	case BlendMode::kBlendModeAdd:
+
+		// 加算
+		blendDesc.BlendEnable = true;
+		blendDesc.SrcBlend = D3D12_BLEND_SRC_ALPHA;
+		blendDesc.BlendOp = D3D12_BLEND_OP_ADD;
+		blendDesc.DestBlend = D3D12_BLEND_ONE;
+		blendDesc.SrcBlendAlpha = D3D12_BLEND_ONE;		  // アルファのソースはそのまま
+		blendDesc.BlendOpAlpha = D3D12_BLEND_OP_ADD;	  // アルファの加算操作
+		blendDesc.DestBlendAlpha = D3D12_BLEND_ZERO;	  // アルファのデスティネーションは無視
+		break;
+
+		// 減算ブレンドモード
+	case BlendMode::kBlendModeSubtract:
+
+		// 減算
+		blendDesc.BlendEnable = true;
+		blendDesc.SrcBlend = D3D12_BLEND_SRC_ALPHA;
+		blendDesc.BlendOp = D3D12_BLEND_OP_REV_SUBTRACT;
+		blendDesc.DestBlend = D3D12_BLEND_ONE;
+		blendDesc.SrcBlendAlpha = D3D12_BLEND_ONE;		 // アルファのソースはそのまま
+		blendDesc.BlendOpAlpha = D3D12_BLEND_OP_ADD;	 // アルファの加算操作
+		blendDesc.DestBlendAlpha = D3D12_BLEND_ZERO;	 // アルファのデスティネーションは無
+		break;
+
+		// 乗算ブレンドモード
+	case BlendMode::kBlendModeMultiply:
+
+		// 乗算
+		blendDesc.BlendEnable = true;
+		blendDesc.SrcBlend = D3D12_BLEND_ZERO;
+		blendDesc.BlendOp = D3D12_BLEND_OP_ADD;
+		blendDesc.DestBlend = D3D12_BLEND_SRC_COLOR;
+		blendDesc.SrcBlendAlpha = D3D12_BLEND_ONE;		 // アルファのソースはそのまま
+		blendDesc.BlendOpAlpha = D3D12_BLEND_OP_ADD;	 // アルファの加算操作
+		blendDesc.DestBlendAlpha = D3D12_BLEND_ZERO;	 // アルファのデスティネーションは無視
+		break;
+
+		// スクリーンブレンドモード
+	case BlendMode::kBlendModeScreen:
+
+		// スクリーン
+		blendDesc.BlendEnable = true;
+		blendDesc.SrcBlend = D3D12_BLEND_INV_DEST_COLOR;
+		blendDesc.BlendOp = D3D12_BLEND_OP_ADD;
+		blendDesc.DestBlend = D3D12_BLEND_ONE;
+		blendDesc.SrcBlendAlpha = D3D12_BLEND_ONE;		 // アルファのソースはそのまま
+		blendDesc.BlendOpAlpha = D3D12_BLEND_OP_ADD;	 // アルファの加算操作
+		blendDesc.DestBlendAlpha = D3D12_BLEND_ZERO;	 // アルファのデスティネーションは無視
+		break;
+
+		// 無効なブレンドモード
+	default:
+		// 無効なモードの処理
+		assert(false && "Invalid Blend Mode");
+		break;
+	}
 #pragma endregion
 
 
@@ -972,7 +1029,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	graphicsPipelineStateDesc.InputLayout = inputLayoutDesc;													// InputLayout
 	graphicsPipelineStateDesc.VS = { vertexShaderBlob->GetBufferPointer(),vertexShaderBlob->GetBufferSize() };	// VertexDhader
 	graphicsPipelineStateDesc.PS = { pixelShaderBlob->GetBufferPointer(),pixelShaderBlob->GetBufferSize() };	// PixelShader
-	graphicsPipelineStateDesc.BlendState = blendDesc;															// BlendState
+	graphicsPipelineStateDesc.BlendState.RenderTarget[0] = blendDesc;											// BlendState
 	graphicsPipelineStateDesc.RasterizerState = rasterizerDesc;													// RasterizeerState
 
 	//レンダーターゲットの設定
@@ -1119,16 +1176,16 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 
 #pragma region テクスチャファイルを読み込みテクスチャリソースを作成しそれに対してSRVを設定してこれらをデスクリプタヒープにバインド
 	// モデルの読み込み
-	ModelData modelData = LoadObjFile("resources", "fence.obj");
+	ModelData modelData;// = LoadObjFile("resources", "axis.obj");
 
 	//Textureを読んで転送する
-	DirectX::ScratchImage mipImages = LoadTexture("resources/fence.png");
+	DirectX::ScratchImage mipImages = LoadTexture("resources/uvChecker.png");
 	const DirectX::TexMetadata& metadata = mipImages.GetMetadata();
 	Microsoft::WRL::ComPtr <ID3D12Resource> textureResource = CreateTextureResource(device.Get(), metadata);
 	UploadTextureData(textureResource.Get(), mipImages);
 
 	//2枚目のTextureを読んで転送する
-	DirectX::ScratchImage mipImages2 = LoadTexture(modelData.material.textureFilePath);
+	DirectX::ScratchImage mipImages2 = LoadTexture("resources/monsterBall.png");
 	const DirectX::TexMetadata& metadata2 = mipImages2.GetMetadata();
 	Microsoft::WRL::ComPtr <ID3D12Resource> textureResource2 = CreateTextureResource(device.Get(), metadata2);
 	UploadTextureData(textureResource2.Get(), mipImages2);
@@ -1150,15 +1207,11 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	// 1つ目のテクスチャのSRVのデスクリプタヒープへのバインド
 	D3D12_CPU_DESCRIPTOR_HANDLE textureSrvHandleCPU = GetCPUDescriptorHandle(srvDescriptorHeap.Get(), descriptorSizeSRV, 1);
 	D3D12_GPU_DESCRIPTOR_HANDLE textureSrvHandleGPU = GetGPUDescriptorHandle(srvDescriptorHeap.Get(), descriptorSizeSRV, 1);
-	textureSrvHandleCPU.ptr += device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-	textureSrvHandleGPU.ptr += device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 	device->CreateShaderResourceView(textureResource.Get(), &srvDesc, textureSrvHandleCPU);
 
 	// 2つ目のテクスチャのSRVのデスクリプタヒープへのバインド
 	D3D12_CPU_DESCRIPTOR_HANDLE textureSrvHandleCPU2 = GetCPUDescriptorHandle(srvDescriptorHeap.Get(), descriptorSizeSRV, 2);
 	D3D12_GPU_DESCRIPTOR_HANDLE textureSrvHandleGPU2 = GetGPUDescriptorHandle(srvDescriptorHeap.Get(), descriptorSizeSRV, 2);
-	textureSrvHandleCPU2.ptr += device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-	textureSrvHandleGPU2.ptr += device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 	device->CreateShaderResourceView(textureResource2.Get(), &srvDesc2, textureSrvHandleCPU2);
 #pragma endregion
 
@@ -1214,40 +1267,33 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 
 	// 球体の頂点データをコピー
 	VertexData* sphereVertexData = vertexData + modelData.vertices.size();
-	for (uint32_t latIndex = 0; latIndex < kSubdivision; ++latIndex)
-	{
+	auto calculateVertex = [](float lat, float lon, float u, float v) {
+		VertexData vertex;
+		vertex.position = { cos(lat) * cos(lon), sin(lat), cos(lat) * sin(lon), 1.0f };
+		vertex.texcoord = { u, v };
+		vertex.normal = { vertex.position.x, vertex.position.y, vertex.position.z };
+		return vertex;
+		};
+
+	for (uint32_t latIndex = 0; latIndex < kSubdivision; ++latIndex) {
 		float lat = -pi / 2.0f + kLatEvery * latIndex; // θ
-		for (uint32_t lonIndex = 0; lonIndex < kSubdivision; ++lonIndex)
-		{
+		float nextLat = lat + kLatEvery;
+
+		for (uint32_t lonIndex = 0; lonIndex < kSubdivision; ++lonIndex) {
 			float u = float(lonIndex) / float(kSubdivision);
 			float v = 1.0f - float(latIndex) / float(kSubdivision);
+			float lon = lonIndex * kLonEvery; // Φ
+			float nextLon = lon + kLonEvery;
 
 			uint32_t start = (latIndex * kSubdivision + lonIndex) * 6;
-			float lon = lonIndex * kLonEvery; // Φ
 
-			sphereVertexData[start + 0].position = { cos(lat) * cos(lon), sin(lat), cos(lat) * sin(lon), 1.0f };
-			sphereVertexData[start + 0].texcoord = { u, v };
-			sphereVertexData[start + 0].normal = { sphereVertexData[start + 0].position.x, sphereVertexData[start + 0].position.y, sphereVertexData[start + 0].position.z };
-
-			sphereVertexData[start + 1].position = { cos(lat + kLatEvery) * cos(lon), sin(lat + kLatEvery), cos(lat + kLatEvery) * sin(lon), 1.0f };
-			sphereVertexData[start + 1].texcoord = { u, v - 1.0f / float(kSubdivision) };
-			sphereVertexData[start + 1].normal = { sphereVertexData[start + 1].position.x, sphereVertexData[start + 1].position.y, sphereVertexData[start + 1].position.z };
-
-			sphereVertexData[start + 2].position = { cos(lat) * cos(lon + kLonEvery), sin(lat), cos(lat) * sin(lon + kLonEvery), 1.0f };
-			sphereVertexData[start + 2].texcoord = { u + 1.0f / float(kSubdivision), v };
-			sphereVertexData[start + 2].normal = { sphereVertexData[start + 2].position.x, sphereVertexData[start + 2].position.y, sphereVertexData[start + 2].position.z };
-
-			sphereVertexData[start + 3].position = { cos(lat + kLatEvery) * cos(lon + kLonEvery), sin(lat + kLatEvery), cos(lat + kLatEvery) * sin(lon + kLonEvery), 1.0f };
-			sphereVertexData[start + 3].texcoord = { u + 1.0f / float(kSubdivision), v - 1.0f / float(kSubdivision) };
-			sphereVertexData[start + 3].normal = { sphereVertexData[start + 3].position.x, sphereVertexData[start + 3].position.y, sphereVertexData[start + 3].position.z };
-
-			sphereVertexData[start + 4].position = { cos(lat) * cos(lon + kLonEvery), sin(lat), cos(lat) * sin(lon + kLonEvery), 1.0f };
-			sphereVertexData[start + 4].texcoord = { u + 1.0f / float(kSubdivision), v };
-			sphereVertexData[start + 4].normal = { sphereVertexData[start + 4].position.x, sphereVertexData[start + 4].position.y, sphereVertexData[start + 4].position.z };
-
-			sphereVertexData[start + 5].position = { cos(lat + kLatEvery) * cos(lon), sin(lat + kLatEvery), cos(lat + kLatEvery) * sin(lon), 1.0f };
-			sphereVertexData[start + 5].texcoord = { u, v - 1.0f / float(kSubdivision) };
-			sphereVertexData[start + 5].normal = { sphereVertexData[start + 5].position.x, sphereVertexData[start + 5].position.y, sphereVertexData[start + 5].position.z };
+			// 6つの頂点を計算
+			sphereVertexData[start + 0] = calculateVertex(lat, lon, u, v);
+			sphereVertexData[start + 1] = calculateVertex(nextLat, lon, u, v - 1.0f / float(kSubdivision));
+			sphereVertexData[start + 2] = calculateVertex(lat, nextLon, u + 1.0f / float(kSubdivision), v);
+			sphereVertexData[start + 3] = calculateVertex(nextLat, nextLon, u + 1.0f / float(kSubdivision), v - 1.0f / float(kSubdivision));
+			sphereVertexData[start + 4] = calculateVertex(lat, nextLon, u + 1.0f / float(kSubdivision), v);
+			sphereVertexData[start + 5] = calculateVertex(nextLat, lon, u, v - 1.0f / float(kSubdivision));
 		}
 	}
 
@@ -1450,7 +1496,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 			commandList->SetGraphicsRootConstantBufferView(1, wvpResource->GetGPUVirtualAddress());							// WVP用CBVを設定
 			commandList->SetGraphicsRootDescriptorTable(2, useMonsterBall ? textureSrvHandleGPU2 : textureSrvHandleGPU);	// SRVのディスクリプタテーブルを設定
 			commandList->SetGraphicsRootConstantBufferView(3, directionalLightResource->GetGPUVirtualAddress());			// ライトのCBVを設定
-			commandList->DrawInstanced(UINT(modelData.vertices.size()), 1, 0, 0);											// 描画コール。三角形を描画(頂点数を変えれば球体が出るようになる「TotalVertexCount」)
+			//commandList->DrawInstanced(UINT(modelData.vertices.size()), 1, 0, 0);											// 描画コール。三角形を描画(頂点数を変えれば球体が出るようになる「TotalVertexCount」)
+			commandList->DrawInstanced(UINT(TotalVertexCount), 1, 0, 0);											// 描画コール。三角形を描画(頂点数を変えれば球体が出るようになる「TotalVertexCount」)
 
 			commandList->SetGraphicsRootDescriptorTable(2, textureSrvHandleGPU);
 
