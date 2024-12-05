@@ -94,6 +94,12 @@ struct ModelData
 	MaterialData material;
 };
 
+// カメラのワールド位置を設定する構造体
+struct CameraForGPU
+{
+	Vector3 worldPosition;
+};
+
 //ウィンドウプロシージャ
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 {
@@ -650,10 +656,10 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 		//エラー時に止まる
 		infoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_ERROR, true);
 
-		/*全部の情報を出す
+		// 全部の情報を出す
 		//警告時に止まる
 		infoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_WARNING, true);
-		*/
+
 
 		//抑制するメッセージのID
 		D3D12_MESSAGE_ID denyIds[] =
@@ -821,7 +827,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	descriptorRange[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;	//Offsetを自動計算
 
 	//RootParameter作成。複数設定できるので配列。今回は1つだけなので長さ１の配列
-	D3D12_ROOT_PARAMETER rootParameters[4] = {};
+	D3D12_ROOT_PARAMETER rootParameters[5] = {};
 	rootParameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;								//CBVを使う
 	rootParameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;								//PixelShaderを使う
 	rootParameters[0].Descriptor.ShaderRegister = 0;												//レジスタ番号０とバインド
@@ -838,6 +844,11 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	rootParameters[3].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;								//CBVを使う
 	rootParameters[3].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;								//PixelShaderを使う
 	rootParameters[3].Descriptor.ShaderRegister = 1;												//レジスタ番号1を使う
+	
+	rootParameters[4].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+	rootParameters[4].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+	rootParameters[4].Descriptor.ShaderRegister = 2; // b2 レジスタを使用
+	
 	descriptionRootSignature.pParameters = rootParameters;											//ルートパラメータ配列へのポインタ
 	descriptionRootSignature.NumParameters = _countof(rootParameters);								//配列の長さ
 #pragma endregion
@@ -1091,7 +1102,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	directionalLightResource->Map(0, nullptr, reinterpret_cast<void**>(&directionalLightData));
 
 	directionalLightData->color = { 1.0f,1.0f,1.0f ,1.0f };
-	directionalLightData->direction = { 0.0f,-1.0f,0.0f };
+	directionalLightData->direction = Normalize({ 0.0f,-1.0f,0.0f });
 	directionalLightData->intensity = 1.0f;
 #pragma endregion
 
@@ -1106,6 +1117,17 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	//単位行列を書き込んでおく
 	wvpData->World = MakeIdentity();
 	wvpData->WVP = MakeIdentity();
+#pragma endregion
+
+
+#pragma region カメラのワールド位置を格納するバッファリソースを生成しその初期値を設定
+	// カメラ用のリソースを作る
+	Microsoft::WRL::ComPtr<ID3D12Resource> cameraResource = CreateBufferResource(device.Get(), sizeof(CameraForGPU));
+	CameraForGPU* cameraData = nullptr;
+	// 書き込むためのアドレスを取得
+	cameraResource->Map(0, nullptr, reinterpret_cast<void**>(&cameraData));
+	// 初期値を設定
+	cameraData->worldPosition = { 0.0f, 0.0f, -5.0f }; // カメラの初期位置
 #pragma endregion
 
 
@@ -1366,23 +1388,101 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 			ImGui::ColorEdit4("color", &materialData->color.x);
 
 			// ImGui の ComboBox を使用して選択肢を表示します
-			if (ImGui::BeginCombo("Select Option", blendModeNames[currentBlendMode]))
-			{
-				for (int n = 0; n < kcountOfBlendMode; n++)
-				{
-					bool isSelected = (currentBlendMode == n);
-					if (ImGui::Selectable(blendModeNames[n], isSelected))
-					{
-						currentBlendMode = static_cast<BlendMode>(n);
-					}
-					if (isSelected)
-					{
-						ImGui::SetItemDefaultFocus(); // 選択中の項目にフォーカスを設定します
-					}
-				}
-				ImGui::EndCombo();
-			}
+			if (ImGui::Combo("Blend Mode", reinterpret_cast<int*>(&currentBlendMode), blendModeNames, kcountOfBlendMode)) {
+				// ブレンドモードが変更されたときに、パイプラインステートを再構築する処理を追加
+				//BlendStateの設定
+				D3D12_RENDER_TARGET_BLEND_DESC blendDesc{};
 
+				// ブレンドするかしないか
+				blendDesc.BlendEnable = false;
+				// すべての色要素を書き込む
+				blendDesc.RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
+
+				// 各ブレンドモードの設定を行う
+				switch (currentBlendMode)
+				{
+					// ブレンドモードなし
+				case BlendMode::kBlendModeNone:
+
+					blendDesc.BlendEnable = false;
+					break;
+
+					// 通常αブレンドモード
+				case BlendMode::kBlendModeNormal:
+
+					// ノーマル
+					blendDesc.BlendEnable = true;
+					blendDesc.SrcBlend = D3D12_BLEND_SRC_ALPHA;
+					blendDesc.BlendOp = D3D12_BLEND_OP_ADD;
+					blendDesc.DestBlend = D3D12_BLEND_INV_SRC_ALPHA;
+					blendDesc.SrcBlendAlpha = D3D12_BLEND_ONE;
+					blendDesc.BlendOpAlpha = D3D12_BLEND_OP_ADD;
+					blendDesc.DestBlendAlpha = D3D12_BLEND_ZERO;
+					break;
+
+					// 加算ブレンドモード
+				case BlendMode::kBlendModeAdd:
+
+					// 加算
+					blendDesc.BlendEnable = true;
+					blendDesc.SrcBlend = D3D12_BLEND_SRC_ALPHA;
+					blendDesc.BlendOp = D3D12_BLEND_OP_ADD;
+					blendDesc.DestBlend = D3D12_BLEND_ONE;
+					blendDesc.SrcBlendAlpha = D3D12_BLEND_ONE;		  // アルファのソースはそのまま
+					blendDesc.BlendOpAlpha = D3D12_BLEND_OP_ADD;	  // アルファの加算操作
+					blendDesc.DestBlendAlpha = D3D12_BLEND_ZERO;	  // アルファのデスティネーションは無視
+					break;
+
+					// 減算ブレンドモード
+				case BlendMode::kBlendModeSubtract:
+
+					// 減算
+					blendDesc.BlendEnable = true;
+					blendDesc.SrcBlend = D3D12_BLEND_SRC_ALPHA;
+					blendDesc.BlendOp = D3D12_BLEND_OP_REV_SUBTRACT;
+					blendDesc.DestBlend = D3D12_BLEND_ONE;
+					blendDesc.SrcBlendAlpha = D3D12_BLEND_ONE;		 // アルファのソースはそのまま
+					blendDesc.BlendOpAlpha = D3D12_BLEND_OP_ADD;	 // アルファの加算操作
+					blendDesc.DestBlendAlpha = D3D12_BLEND_ZERO;	 // アルファのデスティネーションは無
+					break;
+
+					// 乗算ブレンドモード
+				case BlendMode::kBlendModeMultiply:
+
+					// 乗算
+					blendDesc.BlendEnable = true;
+					blendDesc.SrcBlend = D3D12_BLEND_ZERO;
+					blendDesc.BlendOp = D3D12_BLEND_OP_ADD;
+					blendDesc.DestBlend = D3D12_BLEND_SRC_COLOR;
+					blendDesc.SrcBlendAlpha = D3D12_BLEND_ONE;		 // アルファのソースはそのまま
+					blendDesc.BlendOpAlpha = D3D12_BLEND_OP_ADD;	 // アルファの加算操作
+					blendDesc.DestBlendAlpha = D3D12_BLEND_ZERO;	 // アルファのデスティネーションは無視
+					break;
+
+					// スクリーンブレンドモード
+				case BlendMode::kBlendModeScreen:
+
+					// スクリーン
+					blendDesc.BlendEnable = true;
+					blendDesc.SrcBlend = D3D12_BLEND_INV_DEST_COLOR;
+					blendDesc.BlendOp = D3D12_BLEND_OP_ADD;
+					blendDesc.DestBlend = D3D12_BLEND_ONE;
+					blendDesc.SrcBlendAlpha = D3D12_BLEND_ONE;		 // アルファのソースはそのまま
+					blendDesc.BlendOpAlpha = D3D12_BLEND_OP_ADD;	 // アルファの加算操作
+					blendDesc.DestBlendAlpha = D3D12_BLEND_ZERO;	 // アルファのデスティネーションは無視
+					break;
+
+					// 無効なブレンドモード
+				default:
+					// 無効なモードの処理
+					assert(false && "Invalid Blend Mode");
+					break;
+				}
+
+				// グラフィックスパイプラインステートを更新
+				graphicsPipelineStateDesc.BlendState.RenderTarget[0] = blendDesc;
+				device->CreateGraphicsPipelineState(&graphicsPipelineStateDesc, IID_PPV_ARGS(&graphicsPipelineState));
+			}
 			//開発用のUIの処理。実際に開発用のUIを出す場合はここをゲーム固有の処理に置き換える
 			ImGui::ShowDemoWindow();
 
@@ -1399,7 +1499,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 				ImGui::DragFloat3("rotate", &transform.rotate.x, 0.01f);
 				ImGui::DragFloat3("translate", &transform.translate.x, 0.01f);
 
-				ImGui::DragFloat3("directionalLight", &directionalLightData->direction.x, 0.01f);
+				ImGui::SliderFloat3("directionalLight", &directionalLightData->direction.x, -1.0f, 1.0f);
 				ImGui::DragFloat("intensity", &directionalLightData->intensity, 0.01f);
 
 				ImGui::Checkbox("useMonsterBall", &useMonsterBall);
@@ -1496,6 +1596,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 			commandList->SetGraphicsRootConstantBufferView(1, wvpResource->GetGPUVirtualAddress());							// WVP用CBVを設定
 			commandList->SetGraphicsRootDescriptorTable(2, useMonsterBall ? textureSrvHandleGPU2 : textureSrvHandleGPU);	// SRVのディスクリプタテーブルを設定
 			commandList->SetGraphicsRootConstantBufferView(3, directionalLightResource->GetGPUVirtualAddress());			// ライトのCBVを設定
+			commandList->SetGraphicsRootConstantBufferView(4, cameraResource->GetGPUVirtualAddress());
 			//commandList->DrawInstanced(UINT(modelData.vertices.size()), 1, 0, 0);											// 描画コール。三角形を描画(頂点数を変えれば球体が出るようになる「TotalVertexCount」)
 			commandList->DrawInstanced(UINT(TotalVertexCount), 1, 0, 0);											// 描画コール。三角形を描画(頂点数を変えれば球体が出るようになる「TotalVertexCount」)
 

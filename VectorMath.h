@@ -48,7 +48,7 @@ static float Length(const Vector3& v)
 }
 
 //正規化
-static Vector3 Nomalize(const Vector3& v)
+static Vector3 Normalize(const Vector3& v)
 {
 	float length = Length(v);
 	Vector3 result{};
