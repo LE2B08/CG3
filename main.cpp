@@ -964,6 +964,87 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	// すべての色要素を書き込む
 	blendDesc.RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
 
+	// 各ブレンドモードの設定を行う
+	switch (currentBlendMode)
+	{
+		// ブレンドモードなし
+	case BlendMode::kBlendModeNone:
+
+		blendDesc.BlendEnable = false;
+		break;
+
+		// 通常αブレンドモード
+	case BlendMode::kBlendModeNormal:
+
+		// ノーマル
+		blendDesc.BlendEnable = true;
+		blendDesc.SrcBlend = D3D12_BLEND_SRC_ALPHA;
+		blendDesc.BlendOp = D3D12_BLEND_OP_ADD;
+		blendDesc.DestBlend = D3D12_BLEND_INV_SRC_ALPHA;
+		blendDesc.SrcBlendAlpha = D3D12_BLEND_ONE;
+		blendDesc.BlendOpAlpha = D3D12_BLEND_OP_ADD;
+		blendDesc.DestBlendAlpha = D3D12_BLEND_ZERO;
+		break;
+
+		// 加算ブレンドモード
+	case BlendMode::kBlendModeAdd:
+
+		// 加算
+		blendDesc.BlendEnable = true;
+		blendDesc.SrcBlend = D3D12_BLEND_SRC_ALPHA;
+		blendDesc.BlendOp = D3D12_BLEND_OP_ADD;
+		blendDesc.DestBlend = D3D12_BLEND_ONE;
+		blendDesc.SrcBlendAlpha = D3D12_BLEND_ONE;		  // アルファのソースはそのまま
+		blendDesc.BlendOpAlpha = D3D12_BLEND_OP_ADD;	  // アルファの加算操作
+		blendDesc.DestBlendAlpha = D3D12_BLEND_ZERO;	  // アルファのデスティネーションは無視
+		break;
+
+		// 減算ブレンドモード
+	case BlendMode::kBlendModeSubtract:
+
+		// 減算
+		blendDesc.BlendEnable = true;
+		blendDesc.SrcBlend = D3D12_BLEND_SRC_ALPHA;
+		blendDesc.BlendOp = D3D12_BLEND_OP_REV_SUBTRACT;
+		blendDesc.DestBlend = D3D12_BLEND_ONE;
+		blendDesc.SrcBlendAlpha = D3D12_BLEND_ONE;		 // アルファのソースはそのまま
+		blendDesc.BlendOpAlpha = D3D12_BLEND_OP_ADD;	 // アルファの加算操作
+		blendDesc.DestBlendAlpha = D3D12_BLEND_ZERO;	 // アルファのデスティネーションは無
+		break;
+
+		// 乗算ブレンドモード
+	case BlendMode::kBlendModeMultiply:
+
+		// 乗算
+		blendDesc.BlendEnable = true;
+		blendDesc.SrcBlend = D3D12_BLEND_ZERO;
+		blendDesc.BlendOp = D3D12_BLEND_OP_ADD;
+		blendDesc.DestBlend = D3D12_BLEND_SRC_COLOR;
+		blendDesc.SrcBlendAlpha = D3D12_BLEND_ONE;		 // アルファのソースはそのまま
+		blendDesc.BlendOpAlpha = D3D12_BLEND_OP_ADD;	 // アルファの加算操作
+		blendDesc.DestBlendAlpha = D3D12_BLEND_ZERO;	 // アルファのデスティネーションは無視
+		break;
+
+		// スクリーンブレンドモード
+	case BlendMode::kBlendModeScreen:
+
+		// スクリーン
+		blendDesc.BlendEnable = true;
+		blendDesc.SrcBlend = D3D12_BLEND_INV_DEST_COLOR;
+		blendDesc.BlendOp = D3D12_BLEND_OP_ADD;
+		blendDesc.DestBlend = D3D12_BLEND_ONE;
+		blendDesc.SrcBlendAlpha = D3D12_BLEND_ONE;		 // アルファのソースはそのまま
+		blendDesc.BlendOpAlpha = D3D12_BLEND_OP_ADD;	 // アルファの加算操作
+		blendDesc.DestBlendAlpha = D3D12_BLEND_ZERO;	 // アルファのデスティネーションは無視
+		break;
+
+		// 無効なブレンドモード
+	default:
+		// 無効なモードの処理
+		assert(false && "Invalid Blend Mode");
+		break;
+	}
+
 #pragma endregion
 
 
@@ -1201,8 +1282,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	// 1つ目のテクスチャのSRVのデスクリプタヒープへのバインド
 	D3D12_CPU_DESCRIPTOR_HANDLE textureSrvHandleCPU = GetCPUDescriptorHandle(srvDescriptorHeap.Get(), descriptorSizeSRV, 1);
 	D3D12_GPU_DESCRIPTOR_HANDLE textureSrvHandleGPU = GetGPUDescriptorHandle(srvDescriptorHeap.Get(), descriptorSizeSRV, 1);
-	textureSrvHandleCPU.ptr += device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-	textureSrvHandleGPU.ptr += device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 	device->CreateShaderResourceView(textureResource.Get(), &srvDesc, textureSrvHandleCPU);
 
 	//2枚目のTextureを読んで転送する
@@ -1426,7 +1505,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 				D3D12_RENDER_TARGET_BLEND_DESC blendDesc{};
 
 				// ブレンドするかしないか
-				//blendDesc.BlendEnable = false;
+				blendDesc.BlendEnable = false;
 				// すべての色要素を書き込む
 				blendDesc.RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
 
@@ -1666,7 +1745,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 			D3D12_CPU_DESCRIPTOR_HANDLE dsvHandle = dsvDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
 			commandList->OMSetRenderTargets(1, &rtvHandles[backBufferIndex], false, &dsvHandle);
 			//指定した色で画面全体をクリアする
-			float clearColor[] = { 0.0f,0.0f,0.0f,1.0f };	//青っぽい色。RGBAの順
+			float clearColor[] = { 0.3f,0.4f,1.0f,1.0f };	//青っぽい色。RGBAの順
 			commandList->ClearRenderTargetView(rtvHandles[backBufferIndex], clearColor, 0, nullptr);
 			//指定した深度で画面全体をクリアする
 			commandList->ClearDepthStencilView(dsvHandle, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
