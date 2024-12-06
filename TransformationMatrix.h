@@ -4,10 +4,11 @@
 ///==========================================================
 /// TransformationMatrixを拡張
 ///==========================================================
-struct TransfomationMatrix final
+struct TransformationMatrix final
 {
 	Matrix4x4 WVP;
 	Matrix4x4 World;
+	Matrix4x4 WorldInverseTranspose;
 };
 ///==========================================================
 /// TransformationMatrixを拡張
