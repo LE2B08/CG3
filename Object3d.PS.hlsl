@@ -5,7 +5,7 @@ struct Material
 {
     float4 color; // オブジェクトの色
     int enableLighting; // ライティングの有無
-    float shininess; // 輝度
+    float shininess; // 光沢度
     float4x4 uvTransform; // UVTransform
 };
 
@@ -46,39 +46,56 @@ PixelShaderOutput main(VertexShaderOutput input)
     // テクスチャの色
     float4 textureColor = gTexture.Sample(gSampler, transformedUV.xy);
     
+    // ライト方向と法線、カメラ方向の計算
+    float3 lightDir = normalize(-gDirectionalLight.direction);
+    float3 normal = normalize(input.normal);
+    float3 viewDir = normalize(gCamera.worldPosition - input.worldPosition);
+    
+    // 環境光
+    float3 ambientColor = gMaterial.color.rgb * gDirectionalLight.color.rgb * 0.02f; // 環境光を少し減らす
+    
+    // 照明の基本の色
+    float3 diffuseColor = float3(0.0f, 0.0f, 0.0f); // 拡散反射
+    float3 specularColor = float3(0.0f, 0.0f, 0.0f); // 鏡面反射
+    
     //Lightingする場合
     if (gMaterial.enableLighting != 0)
     {
-        float NdotL = dot(normalize(input.normal), -gDirectionalLight.direction);
-        float cos = pow(NdotL * 0.5f + 0.5f, 2.0f);
-       
-        // RGBにはライティングを適用
-        output.color.rgb = gMaterial.color.rgb * textureColor.rgb * gDirectionalLight.color.rgb * cos * gDirectionalLight.intensity;
+        /// ---------- 拡散反射（Diffuse Reflection）---------- ///
+        float NdotL = max(dot(normal, lightDir), 0.0f); // 法線と光の角度
+        float shadowFactor = saturate(NdotL * 0.5f + 0.5f); // 滑らかな影遷移
+        // 拡散反射（Diffuse Reflection）
+        diffuseColor = gMaterial.color.rgb * textureColor.rgb * gDirectionalLight.color.rgb * NdotL * shadowFactor; // 拡散反射を軽減
+        
+        /// ---------- 鏡面反射（Specular Reflection）---------- ///
+        if (NdotL > 0.0f)
+        {
+            float3 reflectDir = reflect(-lightDir, normal); // 反射ベクトル
+            float RdotV = saturate(dot(reflectDir, viewDir)); // 反射ベクトルと視線ベクトルの角度
+            float shininess = max(gMaterial.shininess, 50.0f); // 遷移を滑らかに
+            
+            // ハイライト部分を白色に近づける
+            float3 highlightColor = float3(1.0f, 1.0f, 1.0f); // 白いハイライト
+            specularColor = highlightColor * pow(RdotV, shininess) * gDirectionalLight.intensity;
+        }
+        
+        // 最終色の合成
+        float3 finalColor = ambientColor + diffuseColor + specularColor * 1.2f;
+        
+        // ライティング結果を合成
+        output.color.rgb = saturate(finalColor);
+        
         // α値にはライティングを適用しない
         output.color.a = gMaterial.color.a * textureColor.a;
     }
     else
     {
-        //Lightingしない場合、前回までと同じ演算
+        // ライティングを無効にした場合の処理
         output.color = gMaterial.color * textureColor;
     }
     
-    
-    // textureのα値が0.5以下のときにPixelを棄却
-    if (textureColor.a <= 0.5)
-    {
-        discard;
-    }
-    
-    // textureのα値が0の時にPixelを棄却
-    if (textureColor.a == 0.0)
-    {
-        discard;
-
-    }
-    
-    // output.colorのα値が0の時にPixelを棄却
-    if (output.color.a == 0.0)
+    // アルファ値がほぼ0の場合にピクセルを破棄
+    if (output.color.a < 0.001f)
     {
         discard;
     }

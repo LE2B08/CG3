@@ -1499,7 +1499,10 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 				ImGui::DragFloat3("rotate", &transform.rotate.x, 0.01f);
 				ImGui::DragFloat3("translate", &transform.translate.x, 0.01f);
 
-				ImGui::SliderFloat3("directionalLight", &directionalLightData->direction.x, -1.0f, 1.0f);
+				if (ImGui::SliderFloat3("Direction", &directionalLightData->direction.x, -1.0f, 1.0f)) {
+					directionalLightData->direction = Normalize(directionalLightData->direction);
+				}
+				
 				ImGui::DragFloat("intensity", &directionalLightData->intensity, 0.01f);
 
 				ImGui::Checkbox("useMonsterBall", &useMonsterBall);
