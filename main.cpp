@@ -106,6 +106,9 @@ struct PointLight
 	Vector4 color;	  // ライトの色
 	Vector3 position; // ライトの位置
 	float intensity;  // 輝度
+	float radius;	  // ライトの届く最大距離
+	float decay;	  // 減衰率
+	float padding[2];
 };
 
 //ウィンドウプロシージャ
@@ -1189,9 +1192,11 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 
 	// データをマップして初期化
 	pointLightResource->Map(0, nullptr, reinterpret_cast<void**>(&pointLightData));
-	pointLightData->color = { 1.0f, 1.0f, 1.0f, 1.0f };  // 白いライト
-	pointLightData->position = { 0.0f, 2.0f, -2.0f };    // ライトの位置
-	pointLightData->intensity = 1.0f;                    // 輝度
+	pointLightData->color = { 1.0f, 1.0f, 1.0f, 1.0f }; // 白いライト
+	pointLightData->position = { 0.0f, 2.0f, -2.0f };   // ライトの位置
+	pointLightData->intensity = 1.0f;                   // 輝度
+	pointLightData->radius = 5.0f;						// ライトの有効範囲
+	pointLightData->decay = 2.0f;						// 減衰率
 	pointLightResource->Unmap(0, nullptr);
 
 
@@ -1601,16 +1606,45 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 				ImGui::DragFloat3("rotate", &transform.rotate.x, 0.01f);
 				ImGui::DragFloat3("translate", &transform.translate.x, 0.01f);
 
-				if (ImGui::SliderFloat3("Direction", &directionalLightData->direction.x, -1.0f, 1.0f)) {
-					directionalLightData->direction = Normalize(directionalLightData->direction);
+				ImGui::Checkbox("useMonsterBall", &useMonsterBall);
+				
+				if (ImGui::CollapsingHeader("Point Light Settings")) {
+					static float position[3] = { pointLightData->position.x, pointLightData->position.y, pointLightData->position.z };
+					static float intensity = pointLightData->intensity;
+					static float radius = pointLightData->radius;
+					static float decay = pointLightData->decay;
+
+					// ポイントライトのパラメータ調整
+					if (ImGui::SliderFloat3("Position", position, -10.0f, 10.0f)) {
+						// 座標変更に応じて方向光源の方向を更新
+						Vector3 newDirection = {
+							position[0] - directionalLightData->direction.x,
+							position[1] - directionalLightData->direction.y,
+							position[2] - directionalLightData->direction.z
+						};
+						directionalLightData->direction = Normalize(newDirection);
+					}
+					if (ImGui::SliderFloat("Intensity", &intensity, 0.0f, 5.0f)) {
+						directionalLightData->intensity = intensity; // ポイントライトと同期
+					}
+					ImGui::SliderFloat("Radius", &radius, 0.0f, 10.0f);
+					ImGui::SliderFloat("Decay", &decay, 0.1f, 5.0f);
+
+					// 更新
+					pointLightData->position = { position[0], position[1], position[2] };
+					pointLightData->intensity = intensity;
+					pointLightData->radius = radius;
+					pointLightData->decay = decay;
 				}
 
-				ImGui::DragFloat("intensity", &directionalLightData->intensity, 0.01f);
+				// 方向光源の手動調整UI
+				if (ImGui::CollapsingHeader("Directional Light Settings")) {
+					if (ImGui::SliderFloat3("Direction", &directionalLightData->direction.x, -1.0f, 1.0f)) {
+						directionalLightData->direction = Normalize(directionalLightData->direction);
+					}
+					ImGui::DragFloat("Directional Intensity", &directionalLightData->intensity, 0.01f);
+				}
 
-				ImGui::DragFloat3("PointLight_position", &pointLightData->position.x, 0.01f);
-				ImGui::DragFloat("PointLight_intensity", &pointLightData->intensity, 0.01f);
-
-				ImGui::Checkbox("useMonsterBall", &useMonsterBall);
 				/*ImGui::DragFloat2("UVTranslete", &uvTransformSprite.translate.x, 0.01f, -10.0f, 10.0f);
 				ImGui::DragFloat2("UVScale", &uvTransformSprite.scale.x, 0.01f, -10.0f, 10.0f);
 
