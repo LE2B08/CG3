@@ -857,9 +857,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	rootParameters[4].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
 	rootParameters[4].Descriptor.ShaderRegister = 2; // b2 レジスタを使用
 	
-	rootParameters[5].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+	rootParameters[5].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV; // 定数バッファビュー
 	rootParameters[5].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-	rootParameters[5].Descriptor.ShaderRegister = 3; // b3 レジスタを使用
+	rootParameters[5].Descriptor.ShaderRegister = 3;  // b4 レジスタ
 
 	descriptionRootSignature.pParameters = rootParameters;											//ルートパラメータ配列へのポインタ
 	descriptionRootSignature.NumParameters = _countof(rootParameters);								//配列の長さ
@@ -1183,18 +1183,16 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 #pragma endregion
 
 
+	// 定数バッファの作成
 	Microsoft::WRL::ComPtr<ID3D12Resource> pointLightResource = CreateBufferResource(device.Get(), sizeof(PointLight));
 	PointLight* pointLightData = nullptr;
+
+	// データをマップして初期化
 	pointLightResource->Map(0, nullptr, reinterpret_cast<void**>(&pointLightData));
-	if (pointLightData)
-	{
-		pointLightData->color = { 1.0f, 1.0f, 1.0f, 1.0f };  // ライトの色
-		pointLightData->position = { 0.0f, 10.0f, 0.0f };    // ライトの位置
-		pointLightData->intensity = 1.0f;                   // 輝度
-		pointLightResource->Unmap(0, nullptr);
-	}
-
-
+	pointLightData->color = { 1.0f, 1.0f, 1.0f, 1.0f };  // 白いライト
+	pointLightData->position = { 0.0f, 2.0f, -2.0f };    // ライトの位置
+	pointLightData->intensity = 1.0f;                    // 輝度
+	pointLightResource->Unmap(0, nullptr);
 
 
 #pragma region スプライト用のマテリアルリソースを作成し設定する処理を行う
@@ -1609,14 +1607,14 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 
 				ImGui::DragFloat("intensity", &directionalLightData->intensity, 0.01f);
 
-				ImGui::DragFloat("PointLight_position", &pointLightData->position.x, 0.01f);
+				ImGui::DragFloat3("PointLight_position", &pointLightData->position.x, 0.01f);
 				ImGui::DragFloat("PointLight_intensity", &pointLightData->intensity, 0.01f);
 
 				ImGui::Checkbox("useMonsterBall", &useMonsterBall);
-				ImGui::DragFloat2("UVTranslete", &uvTransformSprite.translate.x, 0.01f, -10.0f, 10.0f);
+				/*ImGui::DragFloat2("UVTranslete", &uvTransformSprite.translate.x, 0.01f, -10.0f, 10.0f);
 				ImGui::DragFloat2("UVScale", &uvTransformSprite.scale.x, 0.01f, -10.0f, 10.0f);
 
-				ImGui::SliderAngle("UVRotate", &uvTransformSprite.rotate.z);
+				ImGui::SliderAngle("UVRotate", &uvTransformSprite.rotate.z);*/
 				ImGui::End();
 			}
 			//ImGuiの内部コマンドを生成する
@@ -1732,6 +1730,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 			commandList->SetGraphicsRootDescriptorTable(2, useMonsterBall ? textureSrvHandleGPU2 : textureSrvHandleGPU);	// SRVのディスクリプタテーブルを設定
 			commandList->SetGraphicsRootConstantBufferView(3, directionalLightResource->GetGPUVirtualAddress());			// ライトのCBVを設定
 			commandList->SetGraphicsRootConstantBufferView(4, cameraResource->GetGPUVirtualAddress());
+			commandList->SetGraphicsRootConstantBufferView(5, pointLightResource->GetGPUVirtualAddress());
 			commandList->DrawInstanced(UINT(TotalVertexCount), 1, 0, 0);											// 描画コール。三角形を描画(頂点数を変えれば球体が出るようになる「TotalVertexCount」)
 
 

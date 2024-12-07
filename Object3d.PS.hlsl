@@ -26,7 +26,7 @@ struct Camera
 // ポイントライト
 struct PointLight
 {
-    float4 color;    // ライトの色
+    float4 color; // ライトの色
     float3 position; // ライトの位置
     float intensity; // 輝度
 };
@@ -49,63 +49,64 @@ SamplerState gSampler : register(s0);
 PixelShaderOutput main(VertexShaderOutput input)
 {
     PixelShaderOutput output;
-    
+
     // UV設定
     float4 transformedUV = mul(float4(input.texcoord, 0.0f, 1.0f), gMaterial.uvTransform);
     float4 textureColor = gTexture.Sample(gSampler, transformedUV.xy); // テクスチャの色
+
+    // ガンマ補正済みのテクスチャの場合、リニア空間に変換
+    textureColor.rgb = pow(textureColor.rgb, 2.2f);
     
     // ライト方向と法線、カメラ方向の計算
-    float3 lightDir = normalize(-gDirectionalLight.direction);
-    float3 normal = normalize(input.normal);
-    float3 viewDir = normalize(gCamera.worldPosition - input.worldPosition);
+    float3 lightDir = normalize(-gDirectionalLight.direction); // ライト方向（逆方向）
+    float3 normal = normalize(input.normal); // 法線の正規化
+    float3 viewDir = normalize(gCamera.worldPosition - input.worldPosition); // 視線方向
     
-    // 環境光
-    float3 ambientColor = gMaterial.color.rgb * gDirectionalLight.color.rgb * 0.02f; // 環境光を少し減らす
-    
-    // 照明の基本の色
-    float3 diffuseColor = float3(0.0f, 0.0f, 0.0f); // 拡散反射
-    float3 specularColor = float3(0.0f, 0.0f, 0.0f); // 鏡面反射
-    
-    // Lightingする場合
+    // 環境光（Ambient）
+    float3 ambientColor = gMaterial.color.rgb * gDirectionalLight.color.rgb * 0.05f; // 環境光を少し強調
+
+    // ハーフランバート反射の計算
+    float NdotL = dot(normal, lightDir); // 法線と光の角度
+    float halfLambertFactor = saturate(pow(NdotL * 0.5f + 0.5f,2.0f)); // ハーフランバート反射
+
+    // 拡散反射（Diffuse）
+    float3 diffuseColor = gMaterial.color.rgb * textureColor.rgb * gDirectionalLight.color.rgb * halfLambertFactor;
+
+    // 鏡面反射（Specular）
+    float3 specularColor = float3(0.0f, 0.0f, 0.0f);
+    if (NdotL > 0.0f)
+    {
+        float3 halfVector = normalize(lightDir + viewDir);
+        float NdotH = max(dot(normal, halfVector), 0.0f);
+        float shininess = max(gMaterial.shininess, 50.0f); // 光沢度を少し低く調整
+        specularColor = float3(1.0f, 1.0f, 1.0f) * pow(NdotH, shininess) * gDirectionalLight.intensity;
+    }
+
+    // 照明効果の統合
     if (gMaterial.enableLighting != 0)
     {
-        // 拡散反射
-        float NdotL = max(dot(normal, lightDir), 0.0f); // 法線と光の角度
-        float shadowFactor = saturate(NdotL * 0.5f + 0.5f); // 滑らかな影遷移
-        diffuseColor = gMaterial.color.rgb * textureColor.rgb * gDirectionalLight.color.rgb * NdotL * shadowFactor; // 拡散反射を軽減
+        // 最終合成（ハーフランバート反射含む）
+        float3 finalColor = ambientColor + diffuseColor + specularColor;
+        output.color.rgb = saturate(finalColor);
         
-        // 鏡面反射（ブリンフォン反射）
-        if (NdotL > 0.0f)
-        {
-            float3 halfVector = normalize(lightDir + viewDir); // ハーフベクトルの計算
-            float NdotH = max(dot(normal, halfVector), 0.0f); // 法線とハーフベクトルの角度を計算
-            float3 reflectDir = reflect(-lightDir, normal); // 反射ベクトル
-            float shininess = max(gMaterial.shininess, 100.0f); // 遷移を滑らかに
-            float3 highlightColor = float3(1.0f, 1.0f, 1.0f); // 白いハイライト
-            specularColor = highlightColor * pow(NdotH, shininess) * gDirectionalLight.intensity;
-        }
-        
-        // ポイントライトの計算を追加
-        float3 pointLightDir = normalize(gPotintLight.position - input.worldPosition);
-        float distanceToPointLight = length(gPotintLight.position - input.worldPosition);
-        float attenuate = gPotintLight.intensity / (distanceToPointLight * distanceToPointLight);
-        
-        // ライティング結果を合成
-        float3 finalColor = ambientColor + diffuseColor + specularColor * 1.2f;
-        output.color.rgb = saturate(finalColor); // ライティング結果を合成
-        output.color.a = gMaterial.color.a * textureColor.a; // α値にはライティングを適用しない
+        // ガンマ補正を適用(必要なら)
+        //output.color.rgb = pow(output.color.rgb, 1.0f / 2.2f); // ガンマ値2.2を適用
+        output.color.a = gMaterial.color.a * textureColor.a;
     }
     else
     {
-        // ライティングを無効にした場合の処理
+        // ライティング無効時
         output.color = gMaterial.color * textureColor;
+        
+        // ガンマ値を適用
+        output.color.rgb = pow(output.color.rgb, 1.0f / 2.2f);
     }
     
-    // アルファ値がほぼ0の場合にピクセルを破棄
+    // α値がほぼ0の場合にピクセルを破棄
     if (output.color.a < 0.001f)
     {
         discard;
     }
-    
+
     return output;
 }
