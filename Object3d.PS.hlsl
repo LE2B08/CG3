@@ -98,7 +98,7 @@ PixelShaderOutput main(VertexShaderOutput input)
         // ライティング無効時
         output.color = gMaterial.color * textureColor;
         
-        // ガンマ値を適用
+        // ガンマ値を適用（出力次第で適用）
         output.color.rgb = pow(output.color.rgb, 1.0f / 2.2f);
     }
     
