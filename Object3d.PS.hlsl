@@ -23,6 +23,14 @@ struct Camera
     float3 worldPosition;
 };
 
+// ポイントライト
+struct PointLight
+{
+    float4 color;    // ライトの色
+    float3 position; // ライトの位置
+    float intensity; // 輝度
+};
+
 //ピクセルシェーダーの出力
 struct PixelShaderOutput
 {
@@ -32,6 +40,7 @@ struct PixelShaderOutput
 ConstantBuffer<Material> gMaterial : register(b0);
 ConstantBuffer<DirectionalLight> gDirectionalLight : register(b1);
 ConstantBuffer<Camera> gCamera : register(b2);
+ConstantBuffer<PointLight> gPotintLight : register(b3);
 
 Texture2D<float4> gTexture : register(t0);
 SamplerState gSampler : register(s0);
@@ -75,6 +84,11 @@ PixelShaderOutput main(VertexShaderOutput input)
             float3 highlightColor = float3(1.0f, 1.0f, 1.0f); // 白いハイライト
             specularColor = highlightColor * pow(NdotH, shininess) * gDirectionalLight.intensity;
         }
+        
+        // ポイントライトの計算を追加
+        float3 pointLightDir = normalize(gPotintLight.position - input.worldPosition);
+        float distanceToPointLight = length(gPotintLight.position - input.worldPosition);
+        float attenuate = gPotintLight.intensity / (distanceToPointLight * distanceToPointLight);
         
         // ライティング結果を合成
         float3 finalColor = ambientColor + diffuseColor + specularColor * 1.2f;
