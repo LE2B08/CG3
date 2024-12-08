@@ -2,7 +2,10 @@
 
 #include "Matrix4x4.h"
 #include "Vector3.h"
+#include "Transform.h"
 #include <cmath>
+
+#define pi 3.141592653589793238462643383279502884197169399375105820974944f
 
 //行列の加法
 static Matrix4x4 Add(const Matrix4x4& m1, const Matrix4x4& m2)
@@ -168,6 +171,26 @@ static Matrix4x4 MakeRotateZMatrix(float radian)
 	return result;
 }
 
+static Matrix4x4 MakeRotationMatrix(const Vector3& rotate)
+{
+	float cosX = cos(rotate.x);
+	float sinX = sin(rotate.x);
+	float cosY = cos(rotate.y);
+	float sinY = sin(rotate.y);
+	float cosZ = cos(rotate.z);
+	float sinZ = sin(rotate.z);
+
+	// 回転行列 (3x3 行列の一部を 4x4 行列に拡張)
+	Matrix4x4 rotationMatrix = {
+		cosY * cosZ, -cosY * sinZ, sinY, 0.0f,
+		cosX * sinZ + cosZ * sinX * sinY, cosX * cosZ - sinX * sinY * sinZ, -cosY * sinX, 0.0f,
+		sinX * sinZ - cosX * cosZ * sinY, cosZ * sinX + cosX * sinY * sinZ, cosX * cosY, 0.0f,
+		0.0f, 0.0f, 0.0f, 1.0f
+	};
+
+	return rotationMatrix;
+}
+
 //平行移動行列
 static Matrix4x4 MakeTranslateMatrix(const Vector3& translate)
 {
@@ -236,4 +259,94 @@ static Matrix4x4 MakeViewportMatrix(float left, float top, float width, float he
 	result.m[3][2] = minDepth;
 	result.m[3][3] = 1.0f;
 	return result;
+}
+
+//スカラー倍
+static Vector3 Multiply(float scalar, const Vector3& v)
+{
+	Vector3 result{};
+	result.x = scalar * v.x;
+	result.y = scalar * v.y;
+	result.z = scalar * v.z;
+	return result;
+}
+
+
+//クロス積
+static Vector3 Cross(const Vector3& v1, const Vector3& v2)
+{
+	Vector3 result{};
+	result.x = v1.y * v2.z - v1.z * v2.y;
+	result.y = v1.z * v2.x - v1.x * v2.z;
+	result.z = v1.x * v2.y - v1.y * v2.x;
+	return result;
+}
+
+//長さ（ノルム）
+static float Length(const Vector3& v)
+{
+	return sqrtf(powf(v.x, 2) + powf(v.y, 2) + powf(v.z, 2));
+}
+
+//正規化
+static Vector3 Normalize(const Vector3& v)
+{
+	float length = Length(v);
+	Vector3 result{};
+	if (length != 0.0)
+	{
+		result.x = v.x / length;
+		result.y = v.y / length;
+		result.z = v.z / length;
+	}
+	return result;
+}
+
+// Matrix4x4 と Vector3 を掛け算する関数
+Vector3 MultiplyVector(const Matrix4x4& matrix, const Vector3& vec)
+{
+	return {
+		matrix.m[0][0] * vec.x + matrix.m[0][1] * vec.y + matrix.m[0][2] * vec.z,
+		matrix.m[1][0] * vec.x + matrix.m[1][1] * vec.y + matrix.m[1][2] * vec.z,
+		matrix.m[2][0] * vec.x + matrix.m[2][1] * vec.y + matrix.m[2][2] * vec.z
+	};
+}
+
+// 回転行列を使ってローカル方向ベクトルをワールド方向に変換
+Vector3 TransformDirection(const Transform& transform, const Vector3& localDirection)
+{
+	// 回転行列を作成
+	Matrix4x4 rotationMatrix = MakeRotationMatrix(transform.rotate);
+
+	// ローカル座標の方向ベクトルをワールド座標に変換
+	Vector3 worldDirection = MultiplyVector(rotationMatrix, localDirection);
+
+	return worldDirection;
+}
+
+Vector3 CalculateSShapePosition(float time, float totalTime, const Vector3& start, const Vector3& end, float amplitude, float frequency)
+{
+	// 時間に基づいて位置を線形補間
+	float t = time / totalTime; // 正規化された時間 [0, 1]
+	Vector3 linearPosition = start + (end - start) * t;
+
+	// S字形状 (サイン波による軌道)
+	float sineValue = amplitude * sin(frequency * t * 2.0f * pi); // 周期を調整
+	return { linearPosition.x, linearPosition.y + sineValue, linearPosition.z };
+}
+
+Vector3 Lerp(const Vector3& start, const Vector3& end, float t)
+{
+	return start + (end - start) * t;
+}
+
+Vector3 BezierCurve(float t, const Vector3& P0, const Vector3& P1, const Vector3& P2, const Vector3& P3)
+{
+	float u = 1.0f - t;
+	float tt = t * t;
+	float uu = u * u;
+	float uuu = uu * u;
+	float ttt = tt * t;
+
+	return uuu * P0 + 3 * uu * t * P1 + 3 * u * tt * P2 + ttt * P3;
 }

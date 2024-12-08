@@ -579,6 +579,359 @@ bool IsCollision(const AABB& aabb, const Vector3& point)
 		point.z >= aabb.min.z && point.z <= aabb.max.z);
 }
 
+// パーティクルの方向を制御する関数
+Particle MakeNewParticleInArc(std::mt19937& randomEngine, const Vector3& translate, float arcRadius, float arcAngleStart, float arcAngleEnd)
+{
+	Particle particle{};
+
+	// 位置とスケールを初期化
+	particle.transform.scale = { 1.0f,1.0f,1.0f };
+	particle.transform.rotate = { 0.0f,0.0f,0.0f };
+
+	// 色と生存時間をランダムに設定
+	std::uniform_real_distribution<float> distColor(0.0f, 1.0f);
+	particle.color = { distColor(randomEngine),distColor(randomEngine),distColor(randomEngine),1.0f };
+
+	// 生存時間をランダムに設定
+	std::uniform_real_distribution<float> distTime(1.0f, 5.0f);
+	particle.lifeTime = distTime(randomEngine);
+	particle.currentTIme = 0;
+
+	// 弧の中でランダムな角度を生成
+	std::uniform_real_distribution<float> distAngle(arcAngleStart, arcAngleEnd);
+	float angle = distAngle(randomEngine);
+
+	// この範囲に基づいて位置と速度を計算
+	float radians = angle * (pi / 180.0f); // 角度をラジアンに変換
+	particle.transform.translate = translate + Vector3{ 0.0f, arcRadius * cos(radians), arcRadius * sin(radians) };
+	particle.velocity = { 0.0f, cos(radians), sin(radians) };
+
+	return particle;
+}
+
+// 弧を描くパーティクル群を生成する関数
+std::list<Particle> EmitInArc(const Emitter& emitter, std::mt19937& randomEngine, float arcRadius, float arcAngleStart, float arcAngleEnd)
+{
+	std::list<Particle> particles{};
+	for (uint32_t count = 0; count < emitter.count; ++count)
+	{
+		particles.push_back(MakeNewParticleInArc(randomEngine, emitter.transform.translate, arcRadius, arcAngleStart, arcAngleEnd));
+	}
+
+	return particles;
+}
+
+// 大砲発射エフェクト用関数
+Particle MakeCannonParticle3D(std::mt19937& randomEngine, const Vector3& translate, const Vector3& forward, const Vector3& up, float spreadAngle, float minSpeed, float maxSpeed)
+{
+	Particle particle{};
+
+	// スケールと回転を初期化
+	particle.transform.scale = { 1.0f,1.0f,1.0f };
+	particle.transform.rotate = { 0.0f,0.0f,0.0f };
+
+	// 発射位置を設定
+	particle.transform.translate = translate;
+
+	// 色を設定
+	std::uniform_real_distribution<float> distColor(0.8f, 1.0f); // 明るいオレンジや黄色
+	particle.color = { distColor(randomEngine), distColor(randomEngine) * 0.5f, 0.0f, 1.0f };
+
+	// 生成時間をランダムに設定
+	std::uniform_real_distribution<float> distTime(0.2f, 1.0f); // 短い寿命
+	particle.lifeTime = distTime(randomEngine);
+	particle.currentTIme = 0;
+
+	// 拡散角度をランダムに設定
+	std::uniform_real_distribution<float> distAngle(-spreadAngle, spreadAngle);
+	float horizontalAngle = distAngle(randomEngine);
+	float verticalAngle = distAngle(randomEngine);
+
+	// ラジアンに変換
+	float hRadians = horizontalAngle * (pi / 180.0f);
+	float vRadians = verticalAngle * (pi / 180.0f);
+
+	// 速度をランダムに設定
+	std::uniform_real_distribution<float> distSpeed(minSpeed, maxSpeed);
+	float speed = distSpeed(randomEngine);
+
+	// パーティクルの速度を計算（拡散範囲内で前方方向を変化させる）
+	Vector3 right = Normalize(Cross(up, forward)); // 右方向ベクトル
+	Vector3 direction =
+		forward * cos(vRadians) * cos(hRadians) +
+		right * sin(hRadians) +
+		up * sin(vRadians);
+
+	direction = Normalize(direction); // 正規化して方向ベクトルを作成
+
+	// パーティクルの速度を設定
+	particle.velocity = direction * speed;
+
+	return particle;
+}
+
+// 大砲のパーティクル群の生成関数
+std::list<Particle> EmitCannonParticles3D(const Emitter& emitter, std::mt19937& randomEngine, float spreadAngle, float minSpeed, float maxSpeed)
+{
+	std::list<Particle> particles{};
+
+	// 大砲のローカル方向を計算
+	Vector3 forward = TransformDirection(emitter.transform, { 0.0f, 0.0f, 1.0f }); // 前方方向
+	Vector3 up = TransformDirection(emitter.transform, { 0.0f, 1.0f, 0.0f });      // 上方向
+
+	for (uint32_t count = 0; count < emitter.count; ++count)
+	{
+		particles.push_back(MakeCannonParticle3D(randomEngine, emitter.transform.translate, forward, up, spreadAngle, minSpeed, maxSpeed));
+	}
+
+	return particles;
+}
+
+// 斬撃用のパーティクルを生成する関数
+Particle MakeSlashParticle(std::mt19937& randomEngine, const Vector3& start, const Vector3& end, float spread)
+{
+	Particle particle{};
+
+	// ランダム分布
+	std::uniform_real_distribution<float> distColor(0.8f, 1.0f); // 明るい赤やオレンジ
+	std::uniform_real_distribution<float> distSpread(-spread, spread);
+	std::uniform_real_distribution<float> distTime(0.5f, 2.0f); // 寿命を短めに
+	std::uniform_real_distribution<float> distScale(0.5f, 1.5f); // サイズのばらつき
+	std::uniform_real_distribution<float> distLerp(0.0f, 1.0f); // 開始点と終了店の間の位置を計算
+
+	// 軌跡方向ベクトルを計算 (斬撃の開始点と終了点を結ぶ方向)
+	Vector3 direction = Normalize(end - start);
+
+	// 生成位置を設定（開始位置と終了位置の間をランダムに決定）
+	float lerpFactor = distLerp(randomEngine);
+	particle.transform.translate = start + (end - start) * lerpFactor;
+
+	// 軌跡にばらつきを追加
+	Vector3 spreadOffset = {
+		distSpread(randomEngine),  // X軸方向
+		distSpread(randomEngine),  // Y軸方向
+		distSpread(randomEngine)   // Z軸方向
+	};
+	particle.transform.translate += spreadOffset;
+
+	// 色を設定
+	particle.color = { distColor(randomEngine), distColor(randomEngine) * 0.2f,0.0f,1.0f };
+
+	// パーティクルの大きさと寿命をランダムに設定
+	particle.transform.scale = { distScale(randomEngine), distScale(randomEngine), distScale(randomEngine) };
+	particle.lifeTime = distTime(randomEngine);
+	particle.currentTIme = 0;
+
+	// 軌跡方向に速度を設定
+	particle.velocity = direction * distScale(randomEngine);
+
+	return particle;
+}
+
+// 斬撃パーティクルを射出する関数
+std::list<Particle> EmitSlashParticles(const Emitter& emitter, std::mt19937& randomEngine, const Vector3& end, float spread)
+{
+	std::list<Particle> particles{};
+
+	for (uint32_t count = 0; count < emitter.count; ++count)
+	{
+		particles.push_back(MakeSlashParticle(randomEngine, emitter.transform.translate, end, spread));
+	}
+	return particles;
+}
+
+// 炎パーティクル生成関数
+Particle MakeFlameParticle(std::mt19937& randomEngine, const Vector3& position, float spread)
+{
+	Particle particle{};
+
+	// ランダム分布
+	std::uniform_real_distribution<float> distColor(0.7f, 1.0f); // 明るい赤～オレンジ
+	std::uniform_real_distribution<float> distSpread(-spread, spread);
+	std::uniform_real_distribution<float> distTime(1.0f, 3.0f); // 炎の寿命
+	std::uniform_real_distribution<float> distScale(0.5f, 2.0f); // 炎の大きさ
+
+	// 初期位置
+	particle.transform.translate = position + Vector3{
+		distSpread(randomEngine),
+		distSpread(randomEngine),
+		distSpread(randomEngine) };
+
+	// 色
+	particle.color = { distColor(randomEngine), distColor(randomEngine) * 0.5f, 0.0f, 1.0f };
+
+	// 大きさと寿命
+	particle.transform.scale = { distScale(randomEngine), distScale(randomEngine), distScale(randomEngine) };
+	particle.lifeTime = distTime(randomEngine);
+	particle.currentTIme = 0;
+
+	// 上昇する速度
+	particle.velocity = { 0.0f, distScale(randomEngine) * 2.0f, 0.0f };
+
+	return particle;
+}
+
+// 炎パーティクル射出関数
+std::list<Particle> EmitFlameParticles(const Emitter& emitter, std::mt19937& randomEngine, const Vector3& position, float spread)
+{
+	std::list<Particle> particles{};
+
+	for (uint32_t count = 0; count < emitter.count; ++count)
+	{
+		particles.push_back(MakeFlameParticle(randomEngine, position, spread));
+	}
+	return particles;
+}
+
+// 水パーティクル生成関数
+Particle MakeWaterParticle(std::mt19937& randomEngine, const Vector3& position, float spread)
+{
+	Particle particle{};
+
+	// ランダム分布
+	std::uniform_real_distribution<float> distColor(0.3f, 0.6f);  // 青色の範囲
+	std::uniform_real_distribution<float> distSpread(-spread, spread);
+	std::uniform_real_distribution<float> distTime(1.5f, 4.0f);   // 水の寿命
+	std::uniform_real_distribution<float> distScale(0.3f, 1.2f);  // サイズのばらつき
+	std::uniform_real_distribution<float> distVelocity(-0.5f, 0.5f); // 水の流れる方向のばらつき
+
+	// 初期位置
+	particle.transform.translate = position + Vector3{
+		distSpread(randomEngine),
+		distSpread(randomEngine),
+		distSpread(randomEngine) };
+
+	// 色（青系で透明感のある色）
+	float blue = distColor(randomEngine);
+	particle.color = { 0.0f, 0.3f * blue, blue, 0.8f };
+
+	// 大きさと寿命
+	particle.transform.scale = { distScale(randomEngine), distScale(randomEngine), distScale(randomEngine) };
+	particle.lifeTime = distTime(randomEngine);
+	particle.currentTIme = 0;
+
+	// 水の流れるような速度
+	particle.velocity = {
+		distVelocity(randomEngine),               // X軸のランダム速度
+		-0.2f * distScale(randomEngine),          // Y軸の落下速度
+		distVelocity(randomEngine) };             // Z軸のランダム速度
+
+	return particle;
+}
+
+// 水パーティクル射出関数
+std::list<Particle> EmitWaterParticles(const Emitter& emitter, std::mt19937& randomEngine, const Vector3& position, float spread)
+{
+	std::list<Particle> particles{};
+
+	for (uint32_t count = 0; count < emitter.count; ++count)
+	{
+		particles.push_back(MakeWaterParticle(randomEngine, position, spread));
+	}
+	return particles;
+}
+
+// 雷パーティクル生成関数
+Particle MakeLightningParticle(std::mt19937& randomEngine, const Vector3& start, const Vector3& end, float spread)
+{
+	Particle particle{};
+
+	// ランダム分布
+	std::uniform_real_distribution<float> distColor(0.8f, 1.0f);   // 明るい青や白
+	std::uniform_real_distribution<float> distSpread(-spread, spread);
+	std::uniform_real_distribution<float> distTime(0.2f, 0.8f);    // 雷の寿命は短め
+	std::uniform_real_distribution<float> distScale(0.1f, 0.5f);   // 細く鋭い線を表現
+	std::uniform_real_distribution<float> distLerp(0.0f, 1.0f);    // 開始点と終了点間のランダム位置
+
+	// 軌跡方向ベクトルを計算
+	Vector3 direction = Normalize(end - start);
+
+	// 初期位置（開始点と終了点の間のランダムな位置）
+	float lerpFactor = distLerp(randomEngine);
+	particle.transform.translate = start + (end - start) * lerpFactor;
+
+	// 軌跡にジグザグのばらつきを追加
+	Vector3 spreadOffset = {
+		distSpread(randomEngine),
+		distSpread(randomEngine),
+		distSpread(randomEngine) };
+	particle.transform.translate += spreadOffset;
+
+	// 色（青白く光る雷をイメージ）
+	particle.color = { distColor(randomEngine), distColor(randomEngine), 1.0f, 1.0f };
+
+	// 大きさと寿命
+	particle.transform.scale = { distScale(randomEngine), distScale(randomEngine), distScale(randomEngine) };
+	particle.lifeTime = distTime(randomEngine);
+	particle.currentTIme = 0;
+
+	// 軌跡方向に高速で移動する
+	particle.velocity = direction * 20.0f; // 高速移動
+
+	return particle;
+}
+
+// 雷パーティクル射出関数
+std::list<Particle> EmitLightningParticles(const Emitter& emitter, std::mt19937& randomEngine, const Vector3& end, float spread)
+{
+	std::list<Particle> particles{};
+
+	for (uint32_t count = 0; count < emitter.count; ++count)
+	{
+		particles.push_back(MakeLightningParticle(randomEngine, emitter.transform.translate, end, spread));
+	}
+	return particles;
+}
+
+// 風パーティクル生成関数
+Particle MakeWindParticle(std::mt19937& randomEngine, const Vector3& position, float spread)
+{
+	Particle particle{};
+
+	// ランダム分布
+	std::uniform_real_distribution<float> distColor(0.5f, 0.8f);   // 柔らかい青や白
+	std::uniform_real_distribution<float> distSpread(-spread, spread);
+	std::uniform_real_distribution<float> distTime(2.0f, 5.0f);    // 風の寿命は長め
+	std::uniform_real_distribution<float> distScale(0.3f, 1.0f);   // 風の柔らかな広がりを表現
+	std::uniform_real_distribution<float> distVelocity(0.2f, 1.0f); // 一方向への緩やかな動き
+
+	// 初期位置（中心からランダムに広がる）
+	particle.transform.translate = position + Vector3{
+		distSpread(randomEngine),
+		distSpread(randomEngine) * 0.5f, // 垂直方向は少し抑える
+		distSpread(randomEngine) };
+
+	// 色（透明感のある白や淡い青）
+	float brightness = distColor(randomEngine);
+	particle.color = { 0.8f * brightness, 0.9f * brightness, brightness, 0.5f }; // 半透明
+
+	// 大きさと寿命
+	particle.transform.scale = { distScale(randomEngine), distScale(randomEngine), distScale(randomEngine) };
+	particle.lifeTime = distTime(randomEngine);
+	particle.currentTIme = 0;
+
+	// 柔らかい一方向の流れを表現する速度
+	particle.velocity = {
+		distVelocity(randomEngine),               // X軸方向のランダムな速度
+		distVelocity(randomEngine) * 0.2f,        // 垂直方向の動きは弱め
+		distVelocity(randomEngine) * 0.5f };       // Z軸方向の緩やかな流れ
+
+	return particle;
+}
+
+// 風パーティクル射出関数
+std::list<Particle> EmitWindParticles(const Emitter& emitter, std::mt19937& randomEngine, const Vector3& position, float spread)
+{
+	std::list<Particle> particles{};
+
+	for (uint32_t count = 0; count < emitter.count; ++count)
+	{
+		particles.push_back(MakeWindParticle(randomEngine, position, spread));
+	}
+	return particles;
+}
+
+
 // Windowsアプリでのエントリーポイント(main関数)
 int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 {
@@ -1418,8 +1771,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 
 
 	bool isMove = true;
-	bool useBillboard = false;
+	bool useBillboard = true;
 	bool isWind = false;
+	bool isParticle = false;
 
 	// 乱数生成期の初期化
 	std::random_device seedGenerator;
@@ -1442,12 +1796,61 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 		{0.0f, 0.0f, 0.0f}
 	};
 
+	// エミッター
+	Emitter emitter2{};
+	emitter2.count = 7;
+	emitter2.frequency = 0.5f; // 0.5秒ごとに発生
+	emitter2.frequencyTime = 0.0f; // 発生時刻用の時刻、0で初期化
+
+	// エミッター
+	Emitter emitter3{};
+	emitter3.count = 10;
+	emitter3.frequency = 0.5f; // 0.5秒ごとに発生
+	emitter3.frequencyTime = 0.0f; // 発生時刻用の時刻、0で初期化
+
+	// エミッター
+	Emitter emitter4{};
+	emitter4.count = 20;
+	emitter4.frequency = 0.5f; // 0.5秒ごとに発生
+	emitter4.frequencyTime = 0.0f; // 発生時刻用の時刻、0で初期化
+
+	// エミッター
+	Emitter emitter5{};
+	emitter5.count = 50;
+	emitter5.frequency = 0.5f; // 0.5秒ごとに発生
+	emitter5.frequencyTime = 0.0f; // 発生時刻用の時刻、0で初期化
+
+	// エミッター
+	Emitter emitter6{};
+	emitter6.count = 25;
+	emitter6.frequency = 0.5f; // 0.5秒ごとに発生
+	emitter6.frequencyTime = 0.0f; // 発生時刻用の時刻、0で初期化
+
+	// エミッター
+	Emitter emitter7{};
+	emitter7.count = 25;
+	emitter7.frequency = 0.5f; // 0.5秒ごとに発生
+	emitter7.frequencyTime = 0.0f; // 発生時刻用の時刻、0で初期化
+
+	// エミッター
+	Emitter emitter8{};
+	emitter8.count = 25;
+	emitter8.frequency = 0.5f; // 0.5秒ごとに発生
+	emitter8.frequencyTime = 0.0f; // 発生時刻用の時刻、0で初期化
+
+	Emitter emitter9{};
+	emitter9.count = 5;
+	emitter9.frequency = 0.5f; // 0.5秒ごとに発生
+	emitter9.frequencyTime = 0.0f; // 発生時刻用の時刻、0で初期化
+
 	// パーティクルをリストで管理する
 	std::list<Particle> particles;
 
 	//Tramsform変数を作る
 	Transform transform{ {1.0f,1.0f,1.0f},{0.0f,0.0f,0.0f},{0.0f,0.0f,0.0f} };
-	Transform cameraTransform{ {1.0f, 1.0f, 1.0f}, {0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, -20.0f} };
+
+	Transform cameraTransform = { {1.0f, 1.0f, 1.0f}, {-0.5f, 1.3f, 0.0f}, {-63.0f, -36.0f, -20.0f} };
+
 	Transform transformSprite{ {1.0f,1.0f,1.0f},{0.0f,0.0f,0.0f},{0.0f,0.0f,0.0f} };
 
 	//UVTransform用の変数を用意
@@ -1493,10 +1896,10 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 			ImGui_ImplWin32_NewFrame();
 			ImGui::NewFrame();
 
-			
+
 			// ImGuiウィジェットの作成（描画ループ内）
 			ImGui::Begin("Settings");
-			
+
 			ImGui::ColorEdit4("color", &materialData->color.x);
 
 			if (ImGui::Combo("Blend Mode", reinterpret_cast<int*>(&currentBlendMode), blendModeNames, kcountOfBlendMode)) {
@@ -1607,13 +2010,220 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 				ImGui::SliderAngle("CameraRotateY", &cameraTransform.rotate.y);
 				ImGui::SliderAngle("CameraRotateZ", &cameraTransform.rotate.z);
 
+				ImGui::Checkbox("Particle", &isParticle);
 				ImGui::Checkbox("Move", &isMove);
 				ImGui::Checkbox("useBillboard", &useBillboard);
 				ImGui::Checkbox("Wind", &isWind);
 
+
 				if (ImGui::Button("Add Particle"))
 				{
 					particles.splice(particles.end(), Emit(emitter, randomEngine));
+				}
+
+				if (ImGui::Button("Emit Arc Particles"))
+				{
+					float arcRadius = 5.0f;             // 弧の半径
+					float arcAngleStart = -45.0f;       // 弧の開始角度（度単位）
+					float arcAngleEnd = 45.0f;          // 弧の終了角度（度単位）
+
+					particles.splice(particles.end(), EmitInArc(emitter2, randomEngine, arcRadius, arcAngleStart, arcAngleEnd));
+				}
+
+				if (ImGui::Button("Fire Cannon"))
+				{
+					float spreadAngle = 15.0f; // 拡散角度 (度)
+					float minSpeed = 100.0f;   // 最小速度
+					float maxSpeed = 200.0f;   // 最大速度
+
+					particles.splice(particles.end(), EmitCannonParticles3D(emitter3, randomEngine, spreadAngle, minSpeed, maxSpeed));
+				}
+
+				if (ImGui::Button("Slash Attack"))
+				{
+					float spread = 0.1f; // パーティクルの散らばり具合
+					int steps = 20;      // 円弧の分割数
+					float radius = 5.0f; // 弧の半径
+					float startAngle = -60.0f; // 弧の開始角度（度）
+					float endAngle = 60.0f;    // 弧の終了角度（度）
+
+					Vector3 center = emitter4.transform.translate; // 弧の中心点
+					float heightOffset = 3.0f;                     // 弧全体の高さを制御
+
+					// 弧上の点を計算しながらパーティクルを生成
+					for (int i = 0; i <= steps; ++i)
+					{
+						float t = static_cast<float>(i) / static_cast<float>(steps);
+						float angle = startAngle + t * (endAngle - startAngle); // 角度を補間
+						float radians = angle * (pi / 180.0f);                 // 度をラジアンに変換
+
+						// 弧上の位置を計算 (円周上の点 + 高さ)
+						Vector3 position = {
+							center.x + radius * cos(radians),  // X座標
+							center.y + heightOffset * (1.0f - t), // 高さを徐々に下げる
+							center.z + radius * sin(radians)   // Z座標
+						};
+
+						// 補間点をエミッター位置として渡してパーティクルを生成
+						Emitter tempEmitter = emitter4;                  // 元のエミッターをコピー
+						tempEmitter.transform.translate = position;      // 弧上の位置に設定
+						particles.splice(particles.end(), EmitSlashParticles(tempEmitter, randomEngine, position, spread));
+					}
+				}
+
+				if (ImGui::Button("Slash S Attack"))
+				{
+					float spread = 0.1f;     // パーティクルの散らばり具合
+					int steps = 30;          // 分割数（細かいほど滑らか）
+					float radius = 5.0f;     // 弧の半径
+					float startAngle = -60.0f; // 弧の開始角度
+					float endAngle = 60.0f;    // 弧の終了角度
+					float waveAmplitude = 2.0f; // S字の振幅
+					float waveFrequency = 3.0f; // S字の波の周波数
+
+					Vector3 center = emitter4.transform.translate; // エミッターの中心位置
+					float heightOffset = 3.0f; // Y軸方向の高さ変化
+
+					for (int i = 0; i <= steps; ++i)
+					{
+						// t は進行度 (0.0 ～ 1.0)
+						float t = static_cast<float>(i) / static_cast<float>(steps);
+
+						// 弧を描くための角度を補間
+						float angle = startAngle + t * (endAngle - startAngle);
+						float radians = angle * (pi / 180.0f);
+
+						// 基本の弧の計算 (X, Y)
+						float x = center.x + radius * cos(radians);
+						float y = center.y + heightOffset * (1.0f - t);
+
+						// Z軸方向にS字カーブを追加
+						float z = center.z + radius * sin(radians) + waveAmplitude * sin(waveFrequency * t * pi);
+
+						// 最終的な位置
+						Vector3 position = { x, y, z };
+
+						// 一時的なエミッターでパーティクルを生成
+						Emitter tempEmitter = emitter4;
+						tempEmitter.transform.translate = position; // 計算した位置に設定
+						particles.splice(particles.end(), EmitSlashParticles(tempEmitter, randomEngine, position, spread));
+					}
+				}
+
+				if (ImGui::Button("Water Breathing Slash"))
+				{
+					int steps = 100;                // カーブの細かさ
+					float radius = 5.0f;            // カーブの半径
+					float height = 10.0f;           // 螺旋の高さ
+					float rotations = 3.0f;         // 螺旋の回転数
+					Vector3 center = emitter5.transform.translate; // エミッターの中心位置
+
+					// ベジエ曲線の制御点を設定
+					for (int i = 0; i < steps; ++i)
+					{
+						float t = static_cast<float>(i) / static_cast<float>(steps - 1);
+
+						// ベジエ曲線の制御点
+						Vector3 P0 = center;
+						Vector3 P3 = center + Vector3{ 0.0f, height, 0.0f }; // 最終点
+						Vector3 P1 = center + Vector3{ radius, height / 3.0f, radius };
+						Vector3 P2 = center + Vector3{ -radius, 2.0f * height / 3.0f, -radius };
+
+						// ベジエ曲線上の点を計算
+						Vector3 position = BezierCurve(t, P0, P1, P2, P3);
+
+						// 回転を加える (螺旋形状)
+						float angle = rotations * 360.0f * t;
+						float radians = angle * (pi / 180.0f);
+						position.x += radius * cos(radians) * t;
+						position.z += radius * sin(radians) * t;
+
+						// 一時的なエミッターでパーティクルを生成
+						Emitter tempEmitter = emitter5;
+						tempEmitter.transform.translate = position; // 計算した位置に設定
+						particles.splice(particles.end(), EmitSlashParticles(tempEmitter, randomEngine, position, 0.1f));
+					}
+				}
+
+				if (ImGui::Button("Flame Breath: Unknowing Fire"))
+				{
+					int steps = 50; // 円弧の細かさ
+					float radius = 10.0f; // 円弧の半径
+					Vector3 center = emitter6.transform.translate; // エミッター中心位置
+
+					for (int i = 0; i < steps; ++i)
+					{
+						float angle = (pi / 2.0f) * static_cast<float>(i) / static_cast<float>(steps - 1) - (pi / 4.0f); // -45°から+45°の範囲
+						Vector3 position = center + Vector3{ radius * cos(angle), 0.0f, radius * sin(angle) };
+
+						// 一時的なエミッターでパーティクルを生成
+						Emitter tempEmitter = emitter6;
+						tempEmitter.transform.translate = position;
+						particles.splice(particles.end(), EmitFlameParticles(tempEmitter, randomEngine, position, 0.2f));
+					}
+				}
+
+
+				if (ImGui::Button("Water Breathing: Calm"))
+				{
+					int steps = 30; // 円のパーティクル数
+					float radius = 5.0f; // 円の半径
+					Vector3 center = emitter7.transform.translate; // 中心位置
+
+					for (int i = 0; i < steps; ++i)
+					{
+						float angle = (2.0f * pi) * static_cast<float>(i) / static_cast<float>(steps);
+						Vector3 position = center + Vector3{ radius * cos(angle), 0.0f, radius * sin(angle) };
+
+						// 一時的なエミッターで静止パーティクルを生成
+						Emitter tempEmitter = emitter7;
+						tempEmitter.transform.translate = position;
+						particles.splice(particles.end(), EmitWaterParticles(tempEmitter, randomEngine, position, 0.0f));
+					}
+				}
+
+				if (ImGui::Button("Thunder Breathing: Thunderclap and Flash"))
+				{
+					int steps = 20; // 雷の軌跡の細かさ
+					float distance = 15.0f; // 移動距離
+					Vector3 start = emitter8.transform.translate; // 開始位置
+					Vector3 end = start + Vector3{ 0.0f, 0.0f, -distance }; // 終了位置
+
+					for (int i = 0; i < steps; ++i)
+					{
+						float t = static_cast<float>(i) / static_cast<float>(steps - 1);
+						Vector3 position = Lerp(start, end, t); // 線形補間
+
+						// 雷のノイズを加える
+						position.x += (randomEngine() % 200 - 100) / 100.0f * 0.5f;
+						position.y += (randomEngine() % 200 - 100) / 100.0f * 0.5f;
+
+						// 一時的なエミッターで雷のパーティクルを生成
+						Emitter tempEmitter = emitter8;
+						tempEmitter.transform.translate = position;
+						particles.splice(particles.end(), EmitLightningParticles(tempEmitter, randomEngine, position, 0.05f));
+					}
+				}
+
+				if (ImGui::Button("Wind Breathing: Clean Storm Wind Tree"))
+				{
+					int steps = 50; // 円形の細かさ
+					float maxRadius = 20.0f; // 最大半径
+					Vector3 center = emitter9.transform.translate; // 中心位置
+
+					for (float r = 0.0f; r <= maxRadius; r += 2.0f) // 半径を増やす
+					{
+						for (int i = 0; i < steps; ++i)
+						{
+							float angle = (2.0f * pi) * static_cast<float>(i) / static_cast<float>(steps);
+							Vector3 position = center + Vector3{ r * cos(angle), 0.0f, r * sin(angle) };
+
+							// 一時的なエミッターで風のパーティクルを生成
+							Emitter tempEmitter = emitter9;
+							tempEmitter.transform.translate = position;
+							particles.splice(particles.end(), EmitWindParticles(tempEmitter, randomEngine, position, 0.05f));
+						}
+					}
 				}
 
 				ImGui::DragFloat3("EmitterTranslate", &emitter.transform.translate.x, 0.01f, -100.0f, 100.0f);
@@ -1712,14 +2322,17 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 				++particleIterator; // 次のパーティクルに進める
 			}
 
-			// 頻度によって発生させる
-			emitter.frequencyTime += kDeltaTime; // 時刻を進める
-
-			// 頻度より大きいなら発生
-			if (emitter.frequency <= emitter.frequencyTime)
+			if (isParticle)
 			{
-				particles.splice(particles.end(), Emit(emitter, randomEngine)); // 発生処理
-				emitter.frequencyTime -= emitter.frequency; // 余計に過ぎた時間も加味して頻度計算する
+				// 頻度によって発生させる
+				emitter.frequencyTime += kDeltaTime; // 時刻を進める
+
+				// 頻度より大きいなら発生
+				if (emitter.frequency <= emitter.frequencyTime)
+				{
+					particles.splice(particles.end(), Emit(emitter, randomEngine)); // 発生処理
+					emitter.frequencyTime -= emitter.frequency; // 余計に過ぎた時間も加味して頻度計算する
+				}
 			}
 
 			// これから書き込むバックバッファのインデックスを取得
@@ -1745,7 +2358,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 			D3D12_CPU_DESCRIPTOR_HANDLE dsvHandle = dsvDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
 			commandList->OMSetRenderTargets(1, &rtvHandles[backBufferIndex], false, &dsvHandle);
 			//指定した色で画面全体をクリアする
-			float clearColor[] = { 0.3f,0.4f,1.0f,1.0f };	//青っぽい色。RGBAの順
+			float clearColor[] = { 0.0f, 0.0f, 0.0f, 1.0f };	//青っぽい色。RGBAの順
 			commandList->ClearRenderTargetView(rtvHandles[backBufferIndex], clearColor, 0, nullptr);
 			//指定した深度で画面全体をクリアする
 			commandList->ClearDepthStencilView(dsvHandle, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
