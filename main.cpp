@@ -1816,7 +1816,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 
 	// エミッター
 	Emitter emitter5{};
-	emitter5.count = 50;
+	emitter5.count = 25;
 	emitter5.frequency = 0.5f; // 0.5秒ごとに発生
 	emitter5.frequencyTime = 0.0f; // 発生時刻用の時刻、0で初期化
 
