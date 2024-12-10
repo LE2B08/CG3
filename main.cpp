@@ -29,6 +29,7 @@ extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg
 #include "Material.h"
 #include "TransformationMatrix.h"
 #include "DirectionalLight.h"
+#include <numbers>
 
 #pragma comment(lib,"dxgi.lib")
 #pragma comment(lib,"dxguid.lib")
@@ -106,6 +107,19 @@ struct PointLight
 	float intensity;  // 輝度
 	float radius;	  // ライトの届く最大距離
 	float decay;	  // 減衰率
+	float padding[2];
+};
+
+// スポットライトを定義
+struct SpotLight
+{
+	Vector4 color; // ライトの色
+	Vector3 position; // ライトの位置
+	float intensity; // スポットライトの方向
+	Vector3 direction; // スポットライトの方向
+	float distance; // ライトの届く最大距離
+	float decay; // 減衰率
+	float cosAngle; // スポットライトの余弦
 	float padding[2];
 };
 
@@ -836,7 +850,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	descriptorRange[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;	//Offsetを自動計算
 
 	//RootParameter作成。複数設定できるので配列。今回は1つだけなので長さ１の配列
-	D3D12_ROOT_PARAMETER rootParameters[6] = {};
+	D3D12_ROOT_PARAMETER rootParameters[7] = {};
 	rootParameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;								//CBVを使う
 	rootParameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;								//PixelShaderを使う
 	rootParameters[0].Descriptor.ShaderRegister = 0;												//レジスタ番号０とバインド
@@ -857,10 +871,14 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	rootParameters[4].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
 	rootParameters[4].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
 	rootParameters[4].Descriptor.ShaderRegister = 2; // b2 レジスタを使用
-	
+
 	rootParameters[5].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV; // 定数バッファビュー
 	rootParameters[5].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-	rootParameters[5].Descriptor.ShaderRegister = 3;  // b4 レジスタ
+	rootParameters[5].Descriptor.ShaderRegister = 3;  // b3 レジスタ
+	
+	rootParameters[6].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV; // 定数バッファビュー
+	rootParameters[6].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+	rootParameters[6].Descriptor.ShaderRegister = 4;  // b3 レジスタ
 
 	descriptionRootSignature.pParameters = rootParameters;											//ルートパラメータ配列へのポインタ
 	descriptionRootSignature.NumParameters = _countof(rootParameters);								//配列の長さ
@@ -1197,6 +1215,21 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	pointLightData->decay = 2.0f;						// 減衰率
 	pointLightResource->Unmap(0, nullptr);
 
+
+	// 定数バッファの作成
+	Microsoft::WRL::ComPtr<ID3D12Resource> spotLightResource = CreateBufferResource(device.Get(), sizeof(SpotLight));
+	SpotLight* spotLightData = nullptr;
+
+	// データをマップして初期化
+	spotLightResource->Map(0, nullptr, reinterpret_cast<void**>(&spotLightData));
+	spotLightData->color = { 1.0f,1.0f,1.0f,1.0f };
+	spotLightData->position = { 2.0f,1.25f,0.0f };
+	spotLightData->distance = 7.0f;
+	spotLightData->direction = Normalize({ -1.0f, -1.0f,0.0f });
+	spotLightData->intensity = 4.0f;
+	spotLightData->decay = 2.0f;
+	spotLightData->cosAngle = std::cos(std::numbers::pi_v<float> / 3.0f);
+	spotLightResource->Unmap(0, nullptr);
 
 #pragma region スプライト用のマテリアルリソースを作成し設定する処理を行う
 	//スプライト用のマテリアルソースを作る
@@ -1605,7 +1638,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 				ImGui::DragFloat3("translate", &transform.translate.x, 0.01f);
 
 				ImGui::Checkbox("useMonsterBall", &useMonsterBall);
-				
+
 				if (ImGui::CollapsingHeader("Point Light Settings")) {
 					static float position[3] = { pointLightData->position.x, pointLightData->position.y, pointLightData->position.z };
 					static float intensity = pointLightData->intensity;
@@ -1641,6 +1674,16 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 						directionalLightData->direction = Normalize(directionalLightData->direction);
 					}
 					ImGui::DragFloat("Directional Intensity", &directionalLightData->intensity, 0.01f);
+				}
+
+				if (ImGui::CollapsingHeader("SpotLight Controls"))
+				{
+					ImGui::ColorEdit3("Spot Light Color", &spotLightData->color.x); // 色を操作
+					ImGui::DragFloat3("Spot Light Position", &spotLightData->position.x, 0.1f); // 位置を操作
+					ImGui::DragFloat3("Spot Light Direction", &spotLightData->direction.x, 0.1f); // 方向を操作
+					ImGui::DragFloat("Spot Light Intensity", &spotLightData->intensity, 0.1f, 0.0f, 10.0f); // 輝度を操作
+					ImGui::DragFloat("Spot Light Decay", &spotLightData->decay, 0.1f, 0.0f, 10.0f); // 減衰率を操作
+					ImGui::DragFloat("Spot Light CosAngle", &spotLightData->cosAngle, 0.01f, 0.0f, 1.0f); // コーンの角度を操作
 				}
 
 				/*ImGui::DragFloat2("UVTranslete", &uvTransformSprite.translate.x, 0.01f, -10.0f, 10.0f);
@@ -1763,6 +1806,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 			commandList->SetGraphicsRootConstantBufferView(3, directionalLightResource->GetGPUVirtualAddress());			// ライトのCBVを設定
 			commandList->SetGraphicsRootConstantBufferView(4, cameraResource->GetGPUVirtualAddress());
 			commandList->SetGraphicsRootConstantBufferView(5, pointLightResource->GetGPUVirtualAddress());
+			commandList->SetGraphicsRootConstantBufferView(6, spotLightResource->GetGPUVirtualAddress());
 			commandList->DrawInstanced(UINT(TotalVertexCount), 1, 0, 0);											// 描画コール。三角形を描画(頂点数を変えれば球体が出るようになる「TotalVertexCount」)
 
 
@@ -1772,6 +1816,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 			commandList->SetGraphicsRootConstantBufferView(3, directionalLightResource2->GetGPUVirtualAddress());			// ライトのCBVを設定
 			commandList->SetGraphicsRootConstantBufferView(4, cameraResource->GetGPUVirtualAddress());
 			commandList->SetGraphicsRootConstantBufferView(5, pointLightResource->GetGPUVirtualAddress());
+			commandList->SetGraphicsRootConstantBufferView(6, spotLightResource->GetGPUVirtualAddress());
 			commandList->IASetVertexBuffers(0, 1, &vertexBufferView3);					//VBVを設定
 			commandList->DrawInstanced(UINT(modelData3.vertices.size()), 1, 0, 0);											// 描画コール。三角形を描画(頂点数を変えれば球体が出るようになる「TotalVertexCount」)
 
