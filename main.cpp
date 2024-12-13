@@ -1142,7 +1142,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	// 書き込むためのアドレスを取得
 	cameraResource->Map(0, nullptr, reinterpret_cast<void**>(&cameraData));
 	// 初期値を設定
-	cameraData->worldPosition = { 0.0f, 0.0f, -5.0f }; // カメラの初期位置
+	cameraData->worldPosition = { 0.0f, 2.0f, -17.0f }; // カメラの初期位置
 #pragma endregion
 
 	// 定数バッファの作成
@@ -1157,7 +1157,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	pointLightData->radius = 5.0f;						// ライトの有効範囲
 	pointLightData->decay = 2.0f;						// 減衰率
 	pointLightResource->Unmap(0, nullptr);
-
 
 #pragma region スプライト用のマテリアルリソースを作成し設定する処理を行う
 	//スプライト用のマテリアルソースを作る
@@ -1567,14 +1566,72 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 
 				ImGui::Checkbox("useMonsterBall", &useMonsterBall);
 
-				// ポイントライトの設定を削除し、方向光源のUIだけを残す
+				//if (ImGui::CollapsingHeader("Camera Settings"))
+				//{
+				//	// カメラの位置を反映するスライダー
+				//	static float cameraPosition[3] = { cameraData->worldPosition.x, cameraData->worldPosition.y, cameraData->worldPosition.z };
+				//	if (ImGui::SliderFloat3("Camera Position", cameraPosition, -20.0f, 20.0f))
+				//	{
+				//		// カメラの位置を更新
+				//		cameraData->worldPosition = { cameraPosition[0], cameraPosition[1], cameraPosition[2] };
+
+				//		// 必要に応じて Unmap/Map を行う
+				//		cameraResource->Unmap(0, nullptr);
+				//		cameraResource->Map(0, nullptr, reinterpret_cast<void**>(&cameraData));
+				//	}
+				//}
+
+				// カメラの設定
+				if (ImGui::CollapsingHeader("Camera Settings"))
+				{
+					static float cameraPosition[3] = { cameraData->worldPosition.x, cameraData->worldPosition.y, cameraData->worldPosition.z };
+					if (ImGui::SliderFloat3("Position", cameraPosition, -20.0f, 20.0f))
+					{
+						cameraData->worldPosition = { cameraPosition[0], cameraPosition[1], cameraPosition[2] };
+					}
+				}
+
+				// 平行光源の設定
 				if (ImGui::CollapsingHeader("Directional Light Settings"))
 				{
-					if (ImGui::SliderFloat3("Direction", &directionalLightData->direction.x, -1.0f, 1.0f))
+					if (ImGui::SliderFloat3("Directional Light Direction", &directionalLightData->direction.x, -1.0f, 1.0f))
 					{
 						directionalLightData->direction = Normalize(directionalLightData->direction);
 					}
-					ImGui::DragFloat("Directional Intensity", &directionalLightData->intensity, 0.01f);
+					ImGui::SliderFloat("Directional Light Intensity", &directionalLightData->intensity, 0.0f, 5.0f);
+				}
+
+				// 点光源の設定
+				if (ImGui::CollapsingHeader("Point Light Settings"))
+				{
+					static float pointPosition[3] = { pointLightData->position.x, pointLightData->position.y, pointLightData->position.z };
+					static float pointIntensity = pointLightData->intensity;
+					static float pointRadius = pointLightData->radius;
+					static float pointDecay = pointLightData->decay;
+
+					// 点光源の位置
+					if (ImGui::SliderFloat3("Point Light Position", pointPosition, -10.0f, 10.0f))
+					{
+						pointLightData->position = { pointPosition[0], pointPosition[1], pointPosition[2] };
+					}
+
+					// 点光源の輝度
+					if (ImGui::SliderFloat("Point Light Intensity", &pointIntensity, 0.0f, 5.0f))
+					{
+						pointLightData->intensity = pointIntensity;
+					}
+
+					// 点光源の半径
+					if (ImGui::SliderFloat("Point Light Radius", &pointRadius, 0.0f, 20.0f))
+					{
+						pointLightData->radius = pointRadius;
+					}
+
+					// 点光源の減衰率
+					if (ImGui::SliderFloat("Point Light Decay", &pointDecay, 0.1f, 5.0f))
+					{
+						pointLightData->decay = pointDecay;
+					}
 				}
 
 
@@ -1613,6 +1670,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 			wvpData->WVP = worldViewProjectionMatrix;
 			wvpData->World = worldMatrix;
 			wvpData->WorldInverseTranspose = worldInverseTranspose;
+
+
+
 
 			//Sprite用のWorldViewProjectionMatrixを作る
 			Matrix4x4 worldMatrixSprite = MakeAffineMatrix(transformSprite.scale, transformSprite.rotate, transformSprite.translate);

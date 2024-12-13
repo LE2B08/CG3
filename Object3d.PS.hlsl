@@ -31,6 +31,7 @@ struct PointLight
     float intensity; // 輝度
     float radius; // ライトの届く最大距離
     float decay; // 減衰率
+    float padding[2]; // パディング 8バイト -> 合計32バイト
 };
 
 //ピクセルシェーダーの出力
@@ -42,7 +43,7 @@ struct PixelShaderOutput
 ConstantBuffer<Material> gMaterial : register(b0);
 ConstantBuffer<DirectionalLight> gDirectionalLight : register(b1);
 ConstantBuffer<Camera> gCamera : register(b2);
-ConstantBuffer<PointLight> gPotintLight : register(b3);
+ConstantBuffer<PointLight> gPointLight : register(b3);
 
 Texture2D<float4> gTexture : register(t0);
 SamplerState gSampler : register(s0);
@@ -54,26 +55,26 @@ PixelShaderOutput main(VertexShaderOutput input)
     // UV設定
     float4 transformedUV = mul(float4(input.texcoord, 0.0f, 1.0f), gMaterial.uvTransform);
     float4 textureColor = gTexture.Sample(gSampler, transformedUV.xy); // テクスチャの色
-
-    // ガンマ補正済みのテクスチャの場合、リニア空間に変換
-    textureColor.rgb = pow(textureColor.rgb, 2.2f);
+    textureColor.rgb = pow(textureColor.rgb, 2.2f); // ガンマ補正済みのテクスチャの場合、リニア空間に変換
 
     // ライト方向と法線、カメラ方向の計算
     float3 lightDir = normalize(-gDirectionalLight.direction); // ライト方向（逆方向）
     float3 normal = normalize(input.normal); // 法線の正規化
-    float3 viewDir = normalize(gCamera.worldPosition - input.worldPosition); // 視線方向
+    float3 viewDir = normalize(gCamera.worldPosition - input.worldPosition); // 視線方向（カメラ方向）
 
     // 環境光（Ambient）
     float3 ambientColor = gMaterial.color.rgb * gDirectionalLight.color.rgb * gDirectionalLight.intensity * 0.1f; // 環境光を少し抑える
-
-    // ハーフランバート反射の計算
+    
+    /// ---------- 平行光源の処理 ---------- ///
+    
+     // ハーフランバート反射の計算
     float NdotL = dot(normal, lightDir); // 法線と光の角度
     float halfLambertFactor = saturate(pow(NdotL * 0.5f + 0.5f, 2.0f)); // ハーフランバート反射
-
-    // 拡散反射（Diffuse）
+    
+    // 平行光源の拡散反射（Diffuse）
     float3 diffuseColor = gMaterial.color.rgb * textureColor.rgb * gDirectionalLight.color.rgb * gDirectionalLight.intensity * halfLambertFactor;
 
-    // 鏡面反射（Specular）
+    // 平行光源の鏡面反射（Specular）
     float3 specularColor = float3(0.0f, 0.0f, 0.0f);
     if (gDirectionalLight.intensity > 0.0f && NdotL > 0.0f)
     {
@@ -82,12 +83,34 @@ PixelShaderOutput main(VertexShaderOutput input)
         float shininess = max(gMaterial.shininess, 50.0f); // 光沢度を調整
         specularColor = float3(1.0f, 1.0f, 1.0f) * pow(NdotH, shininess) * gDirectionalLight.intensity;
     }
+    
+    /// ---------- ポイントライトの処理 ---------- ///
+   
+    // ポイントライトの方向
+    float3 pointLightDir = normalize(gPointLight.position - input.worldPosition);
+   
+    // ポイントライトのハーフランバート反射の計算
+    float pointNdotL = dot(normal, pointLightDir);
+    float pointLightHalfLambertFactor = saturate(pow(pointNdotL * 0.5f + 0.5f, 2.0f)); // ハーフランバート反射
+    
+    // ポイントライトの拡散反射
+    float3 pointDiffuseColor = gMaterial.color.rgb * textureColor.rgb * gPointLight.color.rgb * gPointLight.intensity * pointLightHalfLambertFactor;
+    
+    // ポイントライトの鏡面反射
+    float3 pointSpecularColor = float3(0.0f, 0.0f, 0.0f);
+    if (gPointLight.intensity > 0.0f && pointNdotL > 0.0f)
+    {
+        float3 pointHalfVector = normalize(pointLightDir + viewDir);
+        float pointNdotH = max(dot(normal, pointHalfVector), 0.0f);
+        float shininess = max(gMaterial.shininess, 50.0f);
+        pointSpecularColor = float3(1.0f, 1.0f, 1.0f) * pow(pointNdotH, shininess) * gPointLight.intensity;
+    }
 
     // 照明効果の統合
     if (gMaterial.enableLighting != 0)
     {
         // 環境光 + 拡散反射 + 鏡面反射 + 点光源の拡散反射 + 点光源の鏡面反射
-        float3 finalColor = ambientColor + diffuseColor + specularColor;
+        float3 finalColor = ambientColor + diffuseColor + specularColor + pointDiffuseColor + pointSpecularColor;
         output.color.rgb = saturate(finalColor);
 
         // ガンマ補正を適用（必要なら）
