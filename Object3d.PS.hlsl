@@ -83,31 +83,11 @@ PixelShaderOutput main(VertexShaderOutput input)
         specularColor = float3(1.0f, 1.0f, 1.0f) * pow(NdotH, shininess) * gDirectionalLight.intensity;
     }
 
-    /// ---------- ポイントライトの処理の追加 ---------- ///
-    
-    // 入射光を計算する
-    float3 pointLightDir = normalize(input.worldPosition - gPotintLight.position);
-    
-    // 拡散反射の計算 : 点光源
-    float NdotPointLight = max(dot(normal, -pointLightDir), 0.0f);
-    float halfLambertPointLightFactor = saturate(pow(NdotPointLight * 0.5f + 0.5f, 2.0f)); // ハーフランバート反射
-    
-    float3 pointLightDiffuseColor = gPotintLight.color.rgb * textureColor.rgb * gPotintLight.intensity * halfLambertPointLightFactor;
-    
-    // 鏡面反射の計算 : 点光源
-    float3 pointLightSpecularColor = float3(0.0f, 0.0f, 0.0f);
-    if(NdotPointLight > 0.0f)
-    {
-        float3 pointLightHalfVector = normalize(-pointLightDir + viewDir);
-        float NdotPointLight = max(dot(normal, pointLightHalfVector), 0.0f);
-        pointLightSpecularColor = float3(1.0f, 1.0f, 1.0f) * pow(NdotPointLight, gMaterial.shininess) * gPotintLight.intensity;
-    }
-    
     // 照明効果の統合
     if (gMaterial.enableLighting != 0)
     {
         // 環境光 + 拡散反射 + 鏡面反射 + 点光源の拡散反射 + 点光源の鏡面反射
-        float3 finalColor = ambientColor + diffuseColor + specularColor + pointLightDiffuseColor+pointLightSpecularColor;
+        float3 finalColor = ambientColor + diffuseColor + specularColor;
         output.color.rgb = saturate(finalColor);
 
         // ガンマ補正を適用（必要なら）
