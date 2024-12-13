@@ -93,37 +93,6 @@ struct ModelData
 	MaterialData material;
 };
 
-// カメラのワールド位置を設定する構造体
-struct CameraForGPU
-{
-	Vector3 worldPosition;
-};
-
-// PointLightを定義
-struct PointLight
-{
-	Vector4 color;	  // ライトの色
-	Vector3 position; // ライトの位置
-	float intensity;  // 輝度
-	float radius;	  // ライトの届く最大距離
-	float decay;	  // 減衰率
-	float padding[2];
-};
-
-// スポットライトを定義
-struct SpotLight
-{
-	Vector4 color; // ライトの色
-	Vector3 position; // ライトの位置
-	float intensity; // スポットライトの方向
-	Vector3 direction; // スポットライトの方向
-	float distance; // ライトの届く最大距離
-	float decay; // 減衰率
-	float cosFalloffStart; // 開始角度の余弦値
-	float cosAngle; // スポットライトの余弦
-	float padding[2];
-};
-
 //ウィンドウプロシージャ
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 {
@@ -851,7 +820,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	descriptorRange[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;	//Offsetを自動計算
 
 	//RootParameter作成。複数設定できるので配列。今回は1つだけなので長さ１の配列
-	D3D12_ROOT_PARAMETER rootParameters[7] = {};
+	D3D12_ROOT_PARAMETER rootParameters[8] = {};
 	rootParameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;								//CBVを使う
 	rootParameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;								//PixelShaderを使う
 	rootParameters[0].Descriptor.ShaderRegister = 0;												//レジスタ番号０とバインド
@@ -880,6 +849,10 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	rootParameters[6].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV; // 定数バッファビュー
 	rootParameters[6].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
 	rootParameters[6].Descriptor.ShaderRegister = 4;  // b4 レジスタ
+
+	rootParameters[7].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV; // 定数バッファビュー
+	rootParameters[7].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+	rootParameters[7].Descriptor.ShaderRegister = 5;  // b5 レジスタ
 
 	descriptionRootSignature.pParameters = rootParameters;											//ルートパラメータ配列へのポインタ
 	descriptionRootSignature.NumParameters = _countof(rootParameters);								//配列の長さ
@@ -1197,6 +1170,25 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	spotLightData->cosFalloffStart = std::cos(std::numbers::pi_v<float> / 6.0f);
 	spotLightData->cosAngle = std::cos(std::numbers::pi_v<float> / 3.0f);
 	spotLightResource->Unmap(0, nullptr);
+#pragma endregion
+
+
+#pragma region エリアライトの初期値を設定
+	// 定数バッファの作成
+	Microsoft::WRL::ComPtr<ID3D12Resource> areaLightResource = CreateBufferResource(device.Get(), sizeof(AreaLight));
+	AreaLight* areaLightData = nullptr;
+
+	// データをマップして初期化
+	areaLightResource->Map(0, nullptr, reinterpret_cast<void**>(&areaLightData));
+	areaLightData->color = { 1.0f, 1.0f, 1.0f, 1.0f }; // 白色
+	areaLightData->position = { 0.0f, 5.0f, 0.0f };    // ライトの位置 (シーンの上)
+	areaLightData->normal = Normalize({ 0.0f, -1.0f, 0.0f });     // 面が下を向いている
+	areaLightData->width = 2.0f;                        // 幅 2 単位
+	areaLightData->height = 2.0f;                       // 高さ 2 単位
+	areaLightData->intensity = 5.0f;                    // 輝度 5
+
+	areaLightResource->Unmap(0, nullptr);
+
 #pragma endregion
 
 
@@ -1727,7 +1719,52 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 					}
 				}
 
+				// エリアライトの設定
+				if (ImGui::CollapsingHeader("Area Light Settings"))
+				{
+					static float areaColor[4] = { areaLightData->color.x, areaLightData->color.y, areaLightData->color.z, areaLightData->color.w };
+					static float areaPosition[3] = { areaLightData->position.x, areaLightData->position.y, areaLightData->position.z };
+					static float areaNormal[3] = { areaLightData->normal.x, areaLightData->normal.y, areaLightData->normal.z };
+					static float areaWidth = areaLightData->width;
+					static float areaHeight = areaLightData->height;
+					static float areaIntensity = areaLightData->intensity;
 
+					// エリアライトの色
+					if (ImGui::ColorEdit4("Area Light Color", areaColor))
+					{
+						areaLightData->color = { areaColor[0], areaColor[1], areaColor[2], areaColor[3] };
+					}
+
+					// エリアライトの位置
+					if (ImGui::SliderFloat3("Area Light Position", areaPosition, -10.0f, 10.0f))
+					{
+						areaLightData->position = { areaPosition[0], areaPosition[1], areaPosition[2] };
+					}
+
+					// エリアライトの法線
+					if (ImGui::SliderFloat3("Area Light Normal", areaNormal, -1.0f, 1.0f))
+					{
+						areaLightData->normal = { areaNormal[0], areaNormal[1], areaNormal[2] };
+					}
+
+					// エリアライトの幅
+					if (ImGui::SliderFloat("Area Light Width", &areaWidth, 0.1f, 10.0f))
+					{
+						areaLightData->width = areaWidth;
+					}
+
+					// エリアライトの高さ
+					if (ImGui::SliderFloat("Area Light Height", &areaHeight, 0.1f, 10.0f))
+					{
+						areaLightData->height = areaHeight;
+					}
+
+					// エリアライトの輝度
+					if (ImGui::SliderFloat("Area Light Intensity", &areaIntensity, 0.0f, 5.0f))
+					{
+						areaLightData->intensity = areaIntensity;
+					}
+				}
 
 				/*ImGui::DragFloat2("UVTranslete", &uvTransformSprite.translate.x, 0.01f, -10.0f, 10.0f);
 				ImGui::DragFloat2("UVScale", &uvTransformSprite.scale.x, 0.01f, -10.0f, 10.0f);
@@ -1842,6 +1879,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 			commandList->SetGraphicsRootConstantBufferView(4, cameraResource->GetGPUVirtualAddress());
 			commandList->SetGraphicsRootConstantBufferView(5, pointLightResource->GetGPUVirtualAddress());
 			commandList->SetGraphicsRootConstantBufferView(6, spotLightResource->GetGPUVirtualAddress());
+			commandList->SetGraphicsRootConstantBufferView(7, areaLightResource->GetGPUVirtualAddress());
 			commandList->DrawInstanced(UINT(TotalVertexCount), 1, 0, 0);											// 描画コール。三角形を描画(頂点数を変えれば球体が出るようになる「TotalVertexCount」)
 
 
@@ -1852,6 +1890,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 			commandList->SetGraphicsRootConstantBufferView(4, cameraResource->GetGPUVirtualAddress());
 			commandList->SetGraphicsRootConstantBufferView(5, pointLightResource->GetGPUVirtualAddress());
 			commandList->SetGraphicsRootConstantBufferView(6, spotLightResource->GetGPUVirtualAddress());
+			commandList->SetGraphicsRootConstantBufferView(7, areaLightResource->GetGPUVirtualAddress());
 			commandList->IASetVertexBuffers(0, 1, &vertexBufferView3);					//VBVを設定
 			commandList->DrawInstanced(UINT(modelData3.vertices.size()), 1, 0, 0);											// 描画コール。三角形を描画(頂点数を変えれば球体が出るようになる「TotalVertexCount」)
 

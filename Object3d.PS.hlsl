@@ -46,6 +46,17 @@ struct SpotLight
     float cosAngle; // スポットライトの余弦
 };
 
+// エリアライト
+struct AreaLight
+{
+    float4 color; // ライトの色
+    float3 position; // ライトの位置
+    float3 normal; // 面の法線
+    float width; // エリアライトの幅
+    float height; // エリアライトの高さ
+    float intensity; // 輝度
+};
+
 //ピクセルシェーダーの出力
 struct PixelShaderOutput
 {
@@ -57,6 +68,7 @@ ConstantBuffer<DirectionalLight> gDirectionalLight : register(b1);
 ConstantBuffer<Camera> gCamera : register(b2);
 ConstantBuffer<PointLight> gPointLight : register(b3);
 ConstantBuffer<SpotLight> gSpotLight : register(b4);
+ConstantBuffer<AreaLight> gAreaLight : register(b5);
 
 Texture2D<float4> gTexture : register(t0);
 SamplerState gSampler : register(s0);
@@ -76,7 +88,8 @@ PixelShaderOutput main(VertexShaderOutput input)
     float3 viewDir = normalize(gCamera.worldPosition - input.worldPosition); // 視線方向（カメラ方向）
 
     // 環境光（Ambient）
-    float3 ambientColor = gMaterial.color.rgb * gDirectionalLight.color.rgb * gDirectionalLight.intensity * 0.01f; // 環境光を少し抑える
+    float3 ambientColor = float3(0.1f, 0.1f, 0.1f); // アンビエントライトの色
+    float ambientIntensity = 0.5f;
     
     /// ---------- 平行光源の処理 ---------- ///
     
@@ -141,8 +154,8 @@ PixelShaderOutput main(VertexShaderOutput input)
     
     // スポットライトの拡散反射
     float spotNdotL = dot(normal, spotLightDir); // 法線とライト方向
-    float spotLghtHalfLambertFactor = saturate(pow(spotNdotL * 0.5f + 0.5f, 2.0f)); // ハーフランバート反射
-    float3 spotDiffuseColor = gMaterial.color.rgb * textureColor.rgb * gSpotLight.color.rgb * gSpotLight.intensity * spotLghtHalfLambertFactor * spotAttenuation * spotAngleFactor;
+    float spotLightHalfLambertFactor = saturate(pow(spotNdotL * 0.5f + 0.5f, 2.0f)); // ハーフランバート反射
+    float3 spotDiffuseColor = gMaterial.color.rgb * textureColor.rgb * gSpotLight.color.rgb * gSpotLight.intensity * spotLightHalfLambertFactor * spotAttenuation * spotAngleFactor;
     
     // スポットライトの鏡面反射
     float3 spotSpecularColor = float3(0.0f, 0.0f, 0.0f);
@@ -154,12 +167,43 @@ PixelShaderOutput main(VertexShaderOutput input)
         spotSpecularColor = float3(1.0f, 1.0f, 1.0f) * pow(spotNdotH, shininess) * gSpotLight.intensity * spotAttenuation * spotAngleFactor;
     }
     
+    /// ---------- エリアライトの処理 ---------- ///
 
+    // エリアライトの方向ベクトルの計算
+    float3 areaLightDir = gAreaLight.position - input.worldPosition;
+    float areaDistance = length(areaLightDir); // 距離減衰の計算
+    areaLightDir = normalize(areaLightDir);
+    
+    float areaAttenuation = 1.0f / (1.0f + pow(areaDistance,2.0f));
+    areaAttenuation = saturate(dot(normalize(gAreaLight.normal), -areaLightDir)); // 法線との角度に基づく減衰
+    
+    // エリアライトの拡散反射の計算
+    float areaNdotL = max(dot(normal, areaLightDir), 0.0f); // 法線と光の角度
+    float areaLightHalfLambertFactor = saturate(pow(areaNdotL * 0.5f + 0.5, 2.0f));
+    float3 areaDiffuseColor = gMaterial.color.rgb * gAreaLight.color.rgb * gAreaLight.intensity * areaLightHalfLambertFactor * areaAttenuation;
+    
+    // エリアライトの鏡面反射の計算
+    float3 areaSpecularColor = float3(0.0f, 0.0f, 0.0f);
+    if(gAreaLight.intensity > 0.0f && areaNdotL > 0.0f)
+    {
+        float3 areaHalfVector = normalize(areaLightDir + viewDir);
+        float areaNdotH = max(dot(normal, areaHalfVector), 0.0f);
+        float shininess = max(gMaterial.shininess, 50.0f);
+        areaSpecularColor = float3(1.0f, 1.0f, 1.0f) * pow(areaNdotH, shininess) * gAreaLight.intensity * areaAttenuation;
+    }
+    
     // 照明効果の統合
     if (gMaterial.enableLighting != 0)
     {
         // 環境光 + 拡散反射 + 鏡面反射 + 点光源の拡散反射 + 点光源の鏡面反射 + スポットライトの拡散反射 + スポットライトの鏡面反射
-        float3 finalColor = ambientColor + diffuseColor + specularColor + pointDiffuseColor + pointSpecularColor * attenuation + spotDiffuseColor + spotSpecularColor;
+        float3 finalColor = 
+        ambientColor * ambientIntensity
+        + diffuseColor + specularColor
+        + pointDiffuseColor + pointSpecularColor * attenuation
+        + spotDiffuseColor + spotSpecularColor
+        + areaDiffuseColor + areaSpecularColor
+        ;
+        
         output.color.rgb = saturate(finalColor);
 
         // ガンマ補正を適用（必要なら）
