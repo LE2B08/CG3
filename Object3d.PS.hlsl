@@ -58,12 +58,12 @@ PixelShaderOutput main(VertexShaderOutput input)
     textureColor.rgb = pow(textureColor.rgb, 2.2f); // ガンマ補正済みのテクスチャの場合、リニア空間に変換
 
     // ライト方向と法線、カメラ方向の計算
-    float3 lightDir = normalize(-gDirectionalLight.direction); // ライト方向（逆方向）
+    float3 lightDir = normalize(gDirectionalLight.direction); // ライト方向（逆方向）
     float3 normal = normalize(input.normal); // 法線の正規化
     float3 viewDir = normalize(gCamera.worldPosition - input.worldPosition); // 視線方向（カメラ方向）
 
     // 環境光（Ambient）
-    float3 ambientColor = gMaterial.color.rgb * gDirectionalLight.color.rgb * gDirectionalLight.intensity * 0.1f; // 環境光を少し抑える
+    float3 ambientColor = gMaterial.color.rgb * gDirectionalLight.color.rgb * gDirectionalLight.intensity * 0.01f; // 環境光を少し抑える
     
     /// ---------- 平行光源の処理 ---------- ///
     
@@ -87,14 +87,20 @@ PixelShaderOutput main(VertexShaderOutput input)
     /// ---------- ポイントライトの処理 ---------- ///
    
     // ポイントライトの方向
-    float3 pointLightDir = normalize(gPointLight.position - input.worldPosition);
-   
+    float3 pointLightDir = gPointLight.position - input.worldPosition;
+    float distance = length(pointLightDir); // ポイントライトへの距離
+    pointLightDir = normalize(pointLightDir); // 正規化
+    
+    // 減衰の計算（逆二乗の法則）
+    float attenuation = 1.0f / (1.0f + gPointLight.decay * pow(distance / (gPointLight.radius + 1.0f), gPointLight.decay));
+    attenuation = saturate(attenuation); // 0～1にクランプ
+    
     // ポイントライトのハーフランバート反射の計算
     float pointNdotL = dot(normal, pointLightDir);
     float pointLightHalfLambertFactor = saturate(pow(pointNdotL * 0.5f + 0.5f, 2.0f)); // ハーフランバート反射
     
     // ポイントライトの拡散反射
-    float3 pointDiffuseColor = gMaterial.color.rgb * textureColor.rgb * gPointLight.color.rgb * gPointLight.intensity * pointLightHalfLambertFactor;
+    float3 pointDiffuseColor = gMaterial.color.rgb * textureColor.rgb * gPointLight.color.rgb * gPointLight.intensity * pointLightHalfLambertFactor * attenuation;
     
     // ポイントライトの鏡面反射
     float3 pointSpecularColor = float3(0.0f, 0.0f, 0.0f);
@@ -110,7 +116,7 @@ PixelShaderOutput main(VertexShaderOutput input)
     if (gMaterial.enableLighting != 0)
     {
         // 環境光 + 拡散反射 + 鏡面反射 + 点光源の拡散反射 + 点光源の鏡面反射
-        float3 finalColor = ambientColor + diffuseColor + specularColor + pointDiffuseColor + pointSpecularColor;
+        float3 finalColor = ambientColor + diffuseColor + specularColor + pointDiffuseColor + pointSpecularColor * attenuation;
         output.color.rgb = saturate(finalColor);
 
         // ガンマ補正を適用（必要なら）

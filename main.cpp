@@ -1116,7 +1116,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	directionalLightResource->Map(0, nullptr, reinterpret_cast<void**>(&directionalLightData));
 
 	directionalLightData->color = { 1.0f,1.0f,1.0f ,1.0f }; // 白色
-	directionalLightData->direction = Normalize({ 0.0f,-1.0f,0.0f }); // 下向き
+	directionalLightData->direction = Normalize({ 0.0f,1.0f,0.0f }); // 下向き
 	directionalLightData->intensity = 1.0f; // デフォルト輝度
 #pragma endregion
 
@@ -1566,21 +1566,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 
 				ImGui::Checkbox("useMonsterBall", &useMonsterBall);
 
-				//if (ImGui::CollapsingHeader("Camera Settings"))
-				//{
-				//	// カメラの位置を反映するスライダー
-				//	static float cameraPosition[3] = { cameraData->worldPosition.x, cameraData->worldPosition.y, cameraData->worldPosition.z };
-				//	if (ImGui::SliderFloat3("Camera Position", cameraPosition, -20.0f, 20.0f))
-				//	{
-				//		// カメラの位置を更新
-				//		cameraData->worldPosition = { cameraPosition[0], cameraPosition[1], cameraPosition[2] };
-
-				//		// 必要に応じて Unmap/Map を行う
-				//		cameraResource->Unmap(0, nullptr);
-				//		cameraResource->Map(0, nullptr, reinterpret_cast<void**>(&cameraData));
-				//	}
-				//}
-
 				// カメラの設定
 				if (ImGui::CollapsingHeader("Camera Settings"))
 				{
@@ -1598,7 +1583,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 					{
 						directionalLightData->direction = Normalize(directionalLightData->direction);
 					}
-					ImGui::SliderFloat("Directional Light Intensity", &directionalLightData->intensity, 0.0f, 5.0f);
+					ImGui::SliderFloat("Directional Light Intensity", &directionalLightData->intensity, 0.0f, 10.0f);
 				}
 
 				// 点光源の設定
