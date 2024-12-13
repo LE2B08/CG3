@@ -857,7 +857,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	rootParameters[4].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
 	rootParameters[4].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
 	rootParameters[4].Descriptor.ShaderRegister = 2; // b2 レジスタを使用
-	
+
 	rootParameters[5].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV; // 定数バッファビュー
 	rootParameters[5].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
 	rootParameters[5].Descriptor.ShaderRegister = 3;  // b4 レジスタ
@@ -1115,22 +1115,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	//書き込むためのアドレスを取得
 	directionalLightResource->Map(0, nullptr, reinterpret_cast<void**>(&directionalLightData));
 
-	directionalLightData->color = { 1.0f,1.0f,1.0f ,1.0f };
-	directionalLightData->direction = Normalize({ 0.0f,-1.0f,0.0f });
-	directionalLightData->intensity = 1.0f;
-#pragma endregion
-
-
-#pragma region 平行光源のプロパティ 色 方向 強度 を格納するバッファリソースを生成しその初期値を設定
-	//平行光源用のリソースを作る
-	Microsoft::WRL::ComPtr <ID3D12Resource> directionalLightResource2 = CreateBufferResource(device.Get(), sizeof(DirectionalLight));
-	DirectionalLight* directionalLightData2 = nullptr;
-	//書き込むためのアドレスを取得
-	directionalLightResource2->Map(0, nullptr, reinterpret_cast<void**>(&directionalLightData2));
-
-	directionalLightData2->color = { 1.0f,1.0f,1.0f ,1.0f };
-	directionalLightData2->direction = Normalize({ 0.0f,-1.0f,0.0f });
-	directionalLightData2->intensity = 1.0f;
+	directionalLightData->color = { 1.0f,1.0f,1.0f ,1.0f }; // 白色
+	directionalLightData->direction = Normalize({ 0.0f,-1.0f,0.0f }); // 下向き
+	directionalLightData->intensity = 1.0f; // デフォルト輝度
 #pragma endregion
 
 
@@ -1148,20 +1135,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 #pragma endregion
 
 
-#pragma region WVP行列データを格納するバッファリソースを生成し初期値として単位行列を設定
-	//WVP用のリソースを作る。Matrix4x4 1つ分のサイズを用意する
-	Microsoft::WRL::ComPtr <ID3D12Resource> wvpResource2 = CreateBufferResource(device.Get(), sizeof(TransformationMatrix));
-	//データを書き込む
-	TransformationMatrix* wvpData2 = nullptr;
-	//書き込むためのアドレスを取得
-	wvpResource2->Map(0, nullptr, reinterpret_cast<void**>(&wvpData2));
-	//単位行列を書き込んでおく
-	wvpData2->World = MakeIdentity();
-	wvpData2->WVP = MakeIdentity();
-	wvpData2->WorldInverseTranspose = MakeIdentity();
-#pragma endregion
-
-
 #pragma region カメラのワールド位置を格納するバッファリソースを生成しその初期値を設定
 	// カメラ用のリソースを作る
 	Microsoft::WRL::ComPtr<ID3D12Resource> cameraResource = CreateBufferResource(device.Get(), sizeof(CameraForGPU));
@@ -1171,18 +1144,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	// 初期値を設定
 	cameraData->worldPosition = { 0.0f, 0.0f, -5.0f }; // カメラの初期位置
 #pragma endregion
-
-
-#pragma region カメラのワールド位置を格納するバッファリソースを生成しその初期値を設定
-	// カメラ用のリソースを作る
-	Microsoft::WRL::ComPtr<ID3D12Resource> cameraResource2 = CreateBufferResource(device.Get(), sizeof(CameraForGPU));
-	CameraForGPU* cameraData2 = nullptr;
-	// 書き込むためのアドレスを取得
-	cameraResource2->Map(0, nullptr, reinterpret_cast<void**>(&cameraData2));
-	// 初期値を設定
-	cameraData2->worldPosition = { 0.0f, 0.0f, -5.0f }; // カメラの初期位置
-#pragma endregion
-
 
 	// 定数バッファの作成
 	Microsoft::WRL::ComPtr<ID3D12Resource> pointLightResource = CreateBufferResource(device.Get(), sizeof(PointLight));
@@ -1605,43 +1566,17 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 				ImGui::DragFloat3("translate", &transform.translate.x, 0.01f);
 
 				ImGui::Checkbox("useMonsterBall", &useMonsterBall);
-				
-				if (ImGui::CollapsingHeader("Point Light Settings")) {
-					static float position[3] = { pointLightData->position.x, pointLightData->position.y, pointLightData->position.z };
-					static float intensity = pointLightData->intensity;
-					static float radius = pointLightData->radius;
-					static float decay = pointLightData->decay;
 
-					// ポイントライトのパラメータ調整
-					if (ImGui::SliderFloat3("Position", position, -10.0f, 10.0f)) {
-						// 座標変更に応じて方向光源の方向を更新
-						Vector3 newDirection = {
-							position[0] - directionalLightData->direction.x,
-							position[1] - directionalLightData->direction.y,
-							position[2] - directionalLightData->direction.z
-						};
-						directionalLightData->direction = Normalize(newDirection);
-					}
-					if (ImGui::SliderFloat("Intensity", &intensity, 0.0f, 5.0f)) {
-						directionalLightData->intensity = intensity; // ポイントライトと同期
-					}
-					ImGui::SliderFloat("Radius", &radius, 0.0f, 10.0f);
-					ImGui::SliderFloat("Decay", &decay, 0.1f, 5.0f);
-
-					// 更新
-					pointLightData->position = { position[0], position[1], position[2] };
-					pointLightData->intensity = intensity;
-					pointLightData->radius = radius;
-					pointLightData->decay = decay;
-				}
-
-				// 方向光源の手動調整UI
-				if (ImGui::CollapsingHeader("Directional Light Settings")) {
-					if (ImGui::SliderFloat3("Direction", &directionalLightData->direction.x, -1.0f, 1.0f)) {
+				// ポイントライトの設定を削除し、方向光源のUIだけを残す
+				if (ImGui::CollapsingHeader("Directional Light Settings"))
+				{
+					if (ImGui::SliderFloat3("Direction", &directionalLightData->direction.x, -1.0f, 1.0f))
+					{
 						directionalLightData->direction = Normalize(directionalLightData->direction);
 					}
 					ImGui::DragFloat("Directional Intensity", &directionalLightData->intensity, 0.01f);
 				}
+
 
 				/*ImGui::DragFloat2("UVTranslete", &uvTransformSprite.translate.x, 0.01f, -10.0f, 10.0f);
 				ImGui::DragFloat2("UVScale", &uvTransformSprite.scale.x, 0.01f, -10.0f, 10.0f);
@@ -1678,17 +1613,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 			wvpData->WVP = worldViewProjectionMatrix;
 			wvpData->World = worldMatrix;
 			wvpData->WorldInverseTranspose = worldInverseTranspose;
-
-			Matrix4x4 worldMatrix2 = MakeAffineMatrix(transform3.scale, transform3.rotate, transform3.translate);
-			Matrix4x4 worldViewProjectionMatrix2 = Multiply(Multiply(worldMatrix2, viewMatrix), projectionMatrix);
-
-			// 逆転置行列を計算（法線変換用）
-			Matrix4x4 worldInverse2 = Inverse(worldMatrix2);
-			Matrix4x4 worldInverseTranspose2 = Transpose(worldInverse2);
-
-			wvpData2->WVP = worldViewProjectionMatrix2;
-			wvpData2->World = worldMatrix2;
-			wvpData2->WorldInverseTranspose = worldInverseTranspose2;
 
 			//Sprite用のWorldViewProjectionMatrixを作る
 			Matrix4x4 worldMatrixSprite = MakeAffineMatrix(transformSprite.scale, transformSprite.rotate, transformSprite.translate);
@@ -1767,9 +1691,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 
 
 			commandList->SetGraphicsRootConstantBufferView(0, materialResource2->GetGPUVirtualAddress());					// マテリアルCBVを設定
-			commandList->SetGraphicsRootConstantBufferView(1, wvpResource2->GetGPUVirtualAddress());							// WVP用CBVを設定
+			commandList->SetGraphicsRootConstantBufferView(1, wvpResource->GetGPUVirtualAddress());							// WVP用CBVを設定
 			commandList->SetGraphicsRootDescriptorTable(2, textureSrvHandleGPU3);	// SRVのディスクリプタテーブルを設定
-			commandList->SetGraphicsRootConstantBufferView(3, directionalLightResource2->GetGPUVirtualAddress());			// ライトのCBVを設定
+			commandList->SetGraphicsRootConstantBufferView(3, directionalLightResource->GetGPUVirtualAddress());			// ライトのCBVを設定
 			commandList->SetGraphicsRootConstantBufferView(4, cameraResource->GetGPUVirtualAddress());
 			commandList->SetGraphicsRootConstantBufferView(5, pointLightResource->GetGPUVirtualAddress());
 			commandList->IASetVertexBuffers(0, 1, &vertexBufferView3);					//VBVを設定

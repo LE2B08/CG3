@@ -64,18 +64,18 @@ PixelShaderOutput main(VertexShaderOutput input)
     float3 viewDir = normalize(gCamera.worldPosition - input.worldPosition); // 視線方向
 
     // 環境光（Ambient）
-    float3 ambientColor = gMaterial.color.rgb * gDirectionalLight.color.rgb * 0.00f; // 環境光を少し抑える
+    float3 ambientColor = gMaterial.color.rgb * gDirectionalLight.color.rgb * gDirectionalLight.intensity * 0.1f; // 環境光を少し抑える
 
     // ハーフランバート反射の計算
     float NdotL = dot(normal, lightDir); // 法線と光の角度
     float halfLambertFactor = saturate(pow(NdotL * 0.5f + 0.5f, 2.0f)); // ハーフランバート反射
 
     // 拡散反射（Diffuse）
-    float3 diffuseColor = gMaterial.color.rgb * textureColor.rgb * gDirectionalLight.color.rgb * halfLambertFactor;
+    float3 diffuseColor = gMaterial.color.rgb * textureColor.rgb * gDirectionalLight.color.rgb * gDirectionalLight.intensity * halfLambertFactor;
 
     // 鏡面反射（Specular）
     float3 specularColor = float3(0.0f, 0.0f, 0.0f);
-    if (NdotL > 0.0f)
+    if (gDirectionalLight.intensity > 0.0f && NdotL > 0.0f)
     {
         float3 halfVector = normalize(lightDir + viewDir);
         float NdotH = max(dot(normal, halfVector), 0.0f);
@@ -91,7 +91,7 @@ PixelShaderOutput main(VertexShaderOutput input)
         output.color.rgb = saturate(finalColor);
 
         // ガンマ補正を適用（必要なら）
-        output.color.rgb = pow(output.color.rgb, 1.0f / 2.2f);
+        //output.color.rgb = pow(output.color.rgb, 1.0f / 2.2f);
         output.color.a = gMaterial.color.a * textureColor.a;
     }
     else
