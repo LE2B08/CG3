@@ -257,3 +257,29 @@ static Matrix4x4 MakeViewportMatrix(float left, float top, float width, float he
 	result.m[3][3] = 1.0f;
 	return result;
 }
+
+Matrix4x4 ConvertMatrix4x4(const aiMatrix4x4& assimpMatrix)
+{
+	Matrix4x4 result{};
+
+	// Assimp の行列を転置してコピー（列優先 -> 行優先）
+	result.m[0][0] = assimpMatrix.a1; result.m[0][1] = assimpMatrix.b1; result.m[0][2] = assimpMatrix.c1; result.m[0][3] = assimpMatrix.d1;
+	result.m[1][0] = assimpMatrix.a2; result.m[1][1] = assimpMatrix.b2; result.m[1][2] = assimpMatrix.c2; result.m[1][3] = assimpMatrix.d2;
+	result.m[2][0] = assimpMatrix.a3; result.m[2][1] = assimpMatrix.b3; result.m[2][2] = assimpMatrix.c3; result.m[2][3] = assimpMatrix.d3;
+	result.m[3][0] = assimpMatrix.a4; result.m[3][1] = assimpMatrix.b4; result.m[3][2] = assimpMatrix.c4; result.m[3][3] = assimpMatrix.d4;
+
+	return result;
+}
+
+
+// ノードの変換行列を計算
+Matrix4x4 CaluculateNodeTransform(aiNode* node, const Matrix4x4& parentTransform)
+{
+	// ノードのローカル変換行列を取得
+	aiMatrix4x4 localMatrix = node->mTransformation;
+	localMatrix.Transpose(); // Assimp の行列は列優先のため転置する
+
+	// 親の変換行列と掛け算して最終的な変換行列を計算
+	Matrix4x4 result = Multiply(parentTransform, ConvertMatrix4x4(localMatrix));
+	return result;
+}

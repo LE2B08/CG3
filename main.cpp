@@ -91,11 +91,20 @@ struct MaterialData
 	std::string textureFilePath;
 };
 
+// ノード
+struct Node
+{
+	Matrix4x4 localMatrix{};
+	std::string name;
+	std::vector<Node> children;
+};
+
 // ModelData構造体
 struct ModelData
 {
 	std::vector<VertexData> vertices;
 	MaterialData material;
+	Node rootNode;
 };
 
 // カメラのワールド位置を設定する構造体
@@ -528,6 +537,298 @@ ModelData LoadObjFile(const std::string& directoryPath, const std::string& filen
 	return modelData;
 }
 
+// AssimpのNodeから構造体に変換する関数
+Node ReadNode(aiNode* node)
+{
+	Node result;
+	aiMatrix4x4 aiLocalMatrix = node->mTransformation;
+	aiLocalMatrix.Transpose(); // 行列を転置
+
+	// 変換をNode構造体にコピー
+	for (int i = 0; i < 4; ++i)
+	{
+		for (int j = 0; j < 4; ++j)
+		{
+			result.localMatrix.m[i][j] = aiLocalMatrix[i][j];
+		}
+	}
+
+	result.name = node->mName.C_Str();
+	result.children.resize(node->mNumChildren);
+
+	// 子ノードを再帰的に処理
+	for (unsigned int i = 0; i < node->mNumChildren; ++i)
+	{
+		result.children[i] = ReadNode(node->mChildren[i]);
+	}
+
+	return result;
+}
+
+// .gltfファイルを読み込む関数
+ModelData LoadGLTFFile(const std::string& directoryPath, const std::string& filename)
+{
+	ModelData modelData;
+
+	// Assimpでファイルを読み込む
+	Assimp::Importer importer;
+	std::string filePath = directoryPath + "/" + filename;
+	const aiScene* scene = importer.ReadFile(filePath.c_str(), aiProcess_FlipWindingOrder | aiProcess_FlipUVs | aiProcess_PreTransformVertices);
+	assert(scene && scene->HasMeshes());
+
+	// メッシュを解析する
+	for (uint32_t meshIndex = 0; meshIndex < scene->mNumMeshes; ++meshIndex)
+	{
+		aiMesh* mesh = scene->mMeshes[meshIndex];
+		assert(mesh->HasNormals()); // 法線がないメッシュは非対応
+		assert(mesh->HasTextureCoords(0)); // テクスチャ座標がないメッシュは非対応
+
+		// メッシュの頂点データを解析
+		for (uint32_t faceIndex = 0; faceIndex < mesh->mNumFaces; ++faceIndex)
+		{
+			aiFace& face = mesh->mFaces[faceIndex];
+			assert(face.mNumIndices == 3); // 三角形のみ対応
+
+			// 各頂点を解析
+			for (uint32_t element = 0; element < face.mNumIndices; ++element)
+			{
+				uint32_t vertexIndex = face.mIndices[element];
+				aiVector3D& position = mesh->mVertices[vertexIndex];
+				aiVector3D& normal = mesh->mNormals[vertexIndex];
+				aiVector3D& texcoord = mesh->mTextureCoords[0][vertexIndex];
+
+				VertexData vertex{};
+				vertex.position = { position.x, position.y, position.z, 1.0f };
+				vertex.normal = { normal.x, normal.y, normal.z };
+				vertex.texcoord = { texcoord.x, texcoord.y };
+
+				// 右手系 -> 左手系に変換
+				vertex.position.x *= -1.0f;
+				vertex.normal.x *= -1.0f;
+
+				modelData.vertices.push_back(vertex);
+			}
+		}
+
+		// マテリアルを解析する
+		for (uint32_t materialIndex = 0; materialIndex < scene->mNumMaterials; ++materialIndex)
+		{
+			aiMaterial* material = scene->mMaterials[materialIndex];
+
+			// Diffuse テクスチャが存在する場合のみ設定
+			if (material->GetTextureCount(aiTextureType_DIFFUSE) > 0)
+			{
+				aiString textureFilePath;
+				material->GetTexture(aiTextureType_DIFFUSE, 0, &textureFilePath);
+				modelData.material.textureFilePath = directoryPath + "/" + textureFilePath.C_Str();
+			}
+			else
+			{
+				// Diffuse テクスチャがない場合のデフォルト設定
+				modelData.material.textureFilePath = ""; // またはデフォルトのテクスチャパス
+			}
+
+			// NOTE: vector型がないため、最初のマテリアルだけを使用
+			break; // 最初のマテリアルだけを設定してループを抜ける
+		}
+	}
+
+	// ノード階層を構築
+	modelData.rootNode = ReadNode(scene->mRootNode);
+
+	return modelData;
+}
+
+//// モデルファイル読み込み
+//ModelData LoadModelFile(const std::string& directoryPath, const std::string& fileName)
+//{
+//	ModelData modelData{};
+//
+//	// Assimpでモデルファイルを読み込む
+//	Assimp::Importer importer;
+//	std::string filePath = directoryPath + "/" + fileName;
+//	const aiScene* scene = importer.ReadFile(filePath.c_str(), aiProcess_FlipWindingOrder | aiProcess_FlipUVs | aiProcess_PreTransformVertices);
+//	assert(scene && scene->HasMeshes()); // メッシュがない場合は対応しない
+//
+//	// メッシュを解析する（共通処理）
+//	for (uint32_t meshIndex = 0; meshIndex < scene->mNumMeshes; ++meshIndex)
+//	{
+//		aiMesh* mesh = scene->mMeshes[meshIndex];
+//		assert(mesh->HasNormals()); // 法線がないメッシュは非対応
+//		assert(mesh->HasTextureCoords(0)); // Texcoordがないメッシュは非対応
+//
+//		for (uint32_t faceIndex = 0; faceIndex < mesh->mNumFaces; ++faceIndex)
+//		{
+//			aiFace& face = mesh->mFaces[faceIndex];
+//			assert(face.mNumIndices == 3); // 三角形のみ対応
+//
+//			// 頂点データを解析
+//			for (uint32_t element = 0; element < face.mNumIndices; ++element)
+//			{
+//				uint32_t vertexIndex = face.mIndices[element];
+//				aiVector3D& position = mesh->mVertices[vertexIndex];
+//				aiVector3D& normal = mesh->mNormals[vertexIndex];
+//				aiVector3D& texcoord = mesh->mTextureCoords[0][vertexIndex];
+//
+//				VertexData vertex{};
+//				vertex.position = { position.x, position.y, position.z, 1.0f };
+//				vertex.normal = { normal.x, normal.y, normal.z };
+//				vertex.texcoord = { texcoord.x, texcoord.y };
+//
+//				// 右手系 -> 左手系に変換
+//				vertex.position.x *= -1.0f;
+//				vertex.normal.x *= -1.0f;
+//
+//				modelData.vertices.push_back(vertex);
+//			}
+//		}
+//
+//		// マテリアルを解析する (共通処理)
+//		aiMaterial* material = scene->mMaterials[mesh->mMaterialIndex];
+//		if (material->GetTextureCount(aiTextureType_DIFFUSE) > 0)
+//		{
+//			aiString textureFilePath;
+//			material->GetTexture(aiTextureType_DIFFUSE, 0, &textureFilePath);
+//			modelData.material.textureFilePath = directoryPath + "/" + textureFilePath.C_Str();
+//		}
+//		else
+//		{
+//			modelData.material.textureFilePath = ""; // デフォルト値
+//		}
+//	}
+//
+//	// ノード階層を構築 (共通処理)
+//	modelData.rootNode = ReadNode(scene->mRootNode);
+//
+//	return modelData;
+//
+//}
+
+
+void ParseMeshes(const aiScene* scene, const std::string& directoryPath, ModelData& modelData)
+{
+	for (uint32_t meshIndex = 0; meshIndex < scene->mNumMeshes; ++meshIndex)
+	{
+		aiMesh* mesh = scene->mMeshes[meshIndex];
+		assert(mesh->HasNormals());
+		assert(mesh->HasTextureCoords(0));
+
+		// 頂点データの解析
+		for (uint32_t faceIndex = 0; faceIndex < mesh->mNumFaces; ++faceIndex)
+		{
+			aiFace& face = mesh->mFaces[faceIndex];
+			assert(face.mNumIndices == 3); // 三角形のみ対応
+
+			for (uint32_t element = 0; element < face.mNumIndices; ++element)
+			{
+				uint32_t vertexIndex = face.mIndices[element];
+				aiVector3D& position = mesh->mVertices[vertexIndex];
+				aiVector3D& normal = mesh->mNormals[vertexIndex];
+				aiVector3D& texcoord = mesh->mTextureCoords[0][vertexIndex];
+
+				VertexData vertex{};
+				vertex.position = { position.x, position.y, position.z, 1.0f };
+				vertex.normal = { normal.x, normal.y, normal.z };
+				vertex.texcoord = { texcoord.x, texcoord.y };
+
+				// 右手系 -> 左手系変換
+				vertex.position.x *= -1.0f;
+				vertex.normal.x *= -1.0f;
+
+				modelData.vertices.push_back(vertex);
+			}
+		}
+
+		// マテリアルの解析
+		aiMaterial* material = scene->mMaterials[mesh->mMaterialIndex];
+		if (material->GetTextureCount(aiTextureType_DIFFUSE) > 0)
+		{
+			aiString textureFilePath;
+			material->GetTexture(aiTextureType_DIFFUSE, 0, &textureFilePath);
+			modelData.material.textureFilePath = directoryPath + "/" + textureFilePath.C_Str();
+		}
+		else
+		{
+			modelData.material.textureFilePath = ""; // デフォルト値
+		}
+	}
+}
+
+// gltf特有の処理
+void HandleGltfSpecifics(const aiScene* scene)
+{
+	if (scene->HasAnimations())
+	{
+		// アニメーション解析処理 (スキンメッシュなど)
+		for (unsigned int i = 0; i < scene->mNumAnimations; ++i)
+		{
+			aiAnimation* animation = scene->mAnimations[i];
+			// アニメーションデータを解析
+		}
+	}
+}
+
+// obj特有の処理
+void HandleObjSpecifics(const aiScene* scene)
+{
+	// 必要に応じてOBJ特有の処理を追加
+	// 例: グループ情報の解析
+}
+
+// モデルファイル読み込み
+ModelData LoadModelFile(const std::string& directoryPath, const std::string& filename)
+{
+	// 1. ファイルの拡張子を取得して判定
+	std::string extension = filename.substr(filename.find_last_of('.') + 1);
+
+	// 2. Assimp でモデルを読み込む
+	Assimp::Importer importer;
+	std::string filePath = directoryPath + "/" + filename;
+	const aiScene* scene = nullptr;
+
+	if (extension == "obj")
+	{
+		// OBJ ファイル読み込み
+		scene = importer.ReadFile(filePath.c_str(),
+			aiProcess_FlipWindingOrder | aiProcess_FlipUVs);
+	}
+	else if (extension == "gltf" || extension == "glb")
+	{
+		// glTF ファイル読み込み (追加フラグあり)
+		scene = importer.ReadFile(filePath.c_str(),
+			aiProcess_FlipWindingOrder | aiProcess_FlipUVs | aiProcess_PreTransformVertices);
+	}
+	else
+	{
+		throw std::runtime_error("Unsupported file format: " + extension);
+	}
+
+	// ファイル読み込み結果をチェック
+	assert(scene && scene->HasMeshes());
+
+	// 3. モデルデータ構造体を作成
+	ModelData modelData;
+
+	// 4. メッシュを解析 (共通処理)
+	ParseMeshes(scene, directoryPath, modelData);
+
+	// 5. ノード階層を構築 (共通処理)
+	modelData.rootNode = ReadNode(scene->mRootNode);
+
+	// 6. 必要に応じたカスタム処理
+	if (extension == "gltf" || extension == "glb")
+	{
+		// glTF 特有のカスタム処理
+		HandleGltfSpecifics(scene);
+	}
+	else if (extension == "obj")
+	{
+		// OBJ 特有のカスタム処理
+		HandleObjSpecifics(scene);
+	}
+
+	return modelData;
+}
 
 // Windowsアプリでのエントリーポイント(main関数)
 int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
@@ -1302,7 +1603,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	device->CreateShaderResourceView(textureResource2.Get(), &srvDesc2, textureSrvHandleCPU2);
 
 
-	ModelData modelData3 = LoadObjFile("resources", "terrain.obj");
+	ModelData modelData3 = LoadModelFile("resources", "terrain.obj");
 
 	// 3枚目のTextureを読んで転送する
 	DirectX::ScratchImage mipImages3 = LoadTexture(modelData3.material.textureFilePath);
@@ -1445,7 +1746,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 
 
 	//Tramsform変数を作る
-	Transform transform{ {1.0f,1.0f,1.0f},{0.0f,-1.6f,0.0f},{0.0f,0.0f,0.0f} };
+	Transform transform{ {1.0f,1.0f,1.0f},{0.0f,0.0f,0.0f},{0.0f,0.0f,0.0f} };
 	Transform transform3{ {1.0f,1.0f,1.0f},{0.0f,-1.6f,0.0f},{0.0f,0.0f,0.0f} };
 
 	Transform cameraTransform{ {1.0f,1.0f,1.0f},{0.3f,0.0f,0.0f},{0.0f,10.0f,-30.0f} };
@@ -1741,8 +2042,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 			Matrix4x4 worldInverseTranspose = Transpose(worldInverse);
 
 			// 定数バッファにデータを書き込む
-			wvpData->WVP = worldViewProjectionMatrix;
-			wvpData->World = worldMatrix;
+			wvpData->WVP = Multiply(modelData3.rootNode.localMatrix, worldViewProjectionMatrix);
+			wvpData->World = Multiply(modelData3.rootNode.localMatrix, worldMatrix);
 			wvpData->WorldInverseTranspose = worldInverseTranspose;
 
 

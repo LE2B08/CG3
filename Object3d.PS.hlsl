@@ -76,7 +76,7 @@ PixelShaderOutput main(VertexShaderOutput input)
     float3 viewDir = normalize(gCamera.worldPosition - input.worldPosition); // 視線方向（カメラ方向）
 
     // 環境光（Ambient）
-    float3 ambientColor = gMaterial.color.rgb * gDirectionalLight.color.rgb * gDirectionalLight.intensity * 0.01f; // 環境光を少し抑える
+    float3 ambientColor = gMaterial.color.rgb * gDirectionalLight.color.rgb * gDirectionalLight.intensity * 0.1f; // 環境光を少し抑える
     
     /// ---------- 平行光源の処理 ---------- ///
     
